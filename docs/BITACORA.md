@@ -79,6 +79,7 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D28 | El portal Flutter se compila con **CanvasKit servido desde el propio dominio** (`--no-web-resources-cdn`) | Desde el CDN de Google el motor no llegaba y la página quedaba en blanco. Además elimina una dependencia externa. | CDN de gstatic (valor por defecto) |
 | D29 | **DuckDNS como dominio principal** y el dominio de Azure como respaldo en el mismo certificado | Cumple la rúbrica (DuckDNS) sin perder un acceso alternativo. Con HTTP-01 no se necesita el token de DuckDNS para renovar. | Solo uno de los dos |
 | D30 | Sin `X-Rol-Activo`, la API usa el rol de **menor privilegio** permitido | Es lo más seguro para una persona multirrol; los clientes envían siempre el rol activo. | Usar el rol de mayor privilegio |
+| D31 | Repositorio **público** en GitHub sin credenciales ni el enunciado del docente | El equipo necesita ver las investigaciones, decisiones y evidencias. Los secretos viven solo en `secretos/` y en los `.env` (excluidos); antes de publicar se escanearon los 155 archivos buscando cada valor real de credencial y patrones de claves. El PDF del enunciado es material del curso. | Repositorio privado |
 
 ## 5. Registro cronológico
 
@@ -247,6 +248,13 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
   - Verificado desde Internet: TLS válido, portal, `/admin/`, API, SOAP y las 4 APIs. `seguridad.py` dio **17/17 sobre DuckDNS**.
 - **Informe técnico final:** `docs/00-informe-tecnico.md`.
 - VM desasignadas al terminar.
+
+### 2026-11-06 — Publicación del repositorio
+- Repositorio público: **https://github.com/Hlagua/laboratorio-clinico-distribuido** (rama `main`).
+- `.gitignore` raíz: excluye `secretos/`, `*.env` (salvo `.env.example`), certificados, entornos, compilados, `.claude/` y el enunciado.
+- `README.md` con un índice de investigaciones y decisiones, la arquitectura, las capturas, la tabla de cumplimiento de la rúbrica y cómo ejecutar el proyecto.
+- `docs/capturas/`: 8 capturas de las aplicaciones y 2 gráficos generados con `pruebas/graficos.py` (1 frente a 4 APIs, caída de una VM).
+- **Escaneo de secretos antes de publicar:** encontró la clave SOAP escrita en `pruebas/concurrencia_real.py` (script nuevo del equipo). Se reemplazó por `c["SOAP_API_KEY"]` y se corrigió el XML para enviar la clave dentro de `<lab:Credencial>`, como define el WSDL; sin eso la API respondía 401. Escaneo final: 0 secretos.
 
 ## 6. Pendientes
 
