@@ -1,0 +1,89 @@
+/* Sistema transaccional — Laboratorio Clínico. Paleta clínica sobria. */
+:root {
+  --verde: #0b6e4f;
+  --verde-oscuro: #08513a;
+  --verde-suave: #e6f2ee;
+  --tinta: #1d2b28;
+  --gris: #5f6f6b;
+  --borde: #d9e2df;
+  --fondo: #f4f7f6;
+  --blanco: #ffffff;
+  --rojo: #b00020;
+  --rojo-suave: #fdecee;
+  --ambar: #9a6700;
+  --ambar-suave: #fff4d6;
+  --azul: #1f5fa8;
+  --azul-suave: #e8f0fa;
+  --radio: 8px;
+  --sombra: 0 1px 2px rgb(16 40 34 / 6%), 0 2px 8px rgb(16 40 34 / 6%);
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  color: var(--tinta);
+  background: var(--fondo);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-size: 14px; line-height: 1.45; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 17px; margin: 0 0 12px; }
+h3 { font-size: 15px; margin: 0 0 8px; }
+p.sub { color: var(--gris); margin: 0 0 20px; }
+a { color: var(--verde); }
+
+/* Tarjetas y rejillas */
+.card { background: var(--blanco); border: 1px solid var(--borde); border-radius: var(--radio); box-shadow: var(--sombra); padding: 18px; margin-bottom: 16px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.fila { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.fila > .campo { flex: 1 1 160px; }
+.entre { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.kpi { font-size: 28px; font-weight: 600; color: var(--verde-oscuro); }
+.muted { color: var(--gris); }
+
+/* Formularios */
+.campo { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.campo label { font-size: 12px; font-weight: 600; color: var(--gris); text-transform: uppercase; letter-spacing: .03em; }
+input, select, textarea {
+  font: inherit; padding: 8px 10px; border: 1px solid var(--borde); border-radius: 6px; background: var(--blanco); color: var(--tinta);
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde-suave); border-color: var(--verde); }
+textarea { min-height: 70px; resize: vertical; }
+
+/* Botones */
+button, .boton {
+  font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--verde); background: var(--verde); color: var(--blanco);
+  padding: 8px 14px; border-radius: 6px; text-decoration: none; display: inline-flex; gap: 6px; align-items: center;
+}
+button:hover:not(:disabled) { background: var(--verde-oscuro); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+button.secundario { background: var(--blanco); color: var(--verde); }
+button.secundario:hover:not(:disabled) { background: var(--verde-suave); }
+button.peligro { background: var(--rojo); border-color: var(--rojo); }
+button.chico { padding: 4px 10px; font-size: 13px; }
+
+/* Tablas */
+.tabla-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--gris); border-bottom: 2px solid var(--borde); padding: 8px; }
+td { border-bottom: 1px solid var(--borde); padding: 8px; vertical-align: top; }
+tr.clic { cursor: pointer; }
+tr.clic:hover td { background: var(--verde-suave); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Etiquetas de estado */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--verde-suave); color: var(--verde-oscuro); white-space: nowrap; }
+.badge.gris { background: #eceff0; color: var(--gris); }
+.badge.ambar { background: var(--ambar-suave); color: var(--ambar); }
+.badge.rojo { background: var(--rojo-suave); color: var(--rojo); }
+.badge.azul { background: var(--azul-suave); color: var(--azul); }
+.fuera { color: var(--rojo); font-weight: 700; }
+
+/* Avisos */
+.alerta { padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; border: 1px solid; }
+.alerta.error { background: var(--rojo-suave); border-color: #f3b8c0; color: var(--rojo); }
+.alerta.ok { background: var(--verde-suave); border-color: #b9dccf; color: var(--verde-oscuro); }
+.alerta.aviso { background: var(--ambar-suave); border-color: #f0d68a; color: var(--ambar); }
+.vacio { text-align: center; color: var(--gris); padding: 24px; }
+
+@media (max-width: 720px) {
+  .card { padding: 14px; }
+  h1 { font-size: 19px; }
+}

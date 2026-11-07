@@ -1,0 +1,87 @@
+[
+  {
+    "prueba": "certificado TLS válido y de confianza",
+    "ok": true,
+    "detalle": "Let's Encrypt, TLSv1.3, vence 2027-02-03"
+  },
+  {
+    "prueba": "cabecera HSTS",
+    "ok": true,
+    "detalle": "max-age=31536000"
+  },
+  {
+    "prueba": "HTTP redirige a HTTPS",
+    "ok": true,
+    "detalle": "301"
+  },
+  {
+    "prueba": "sin token -> 401",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "token falso -> 401",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "contraseña incorrecta -> 401 sin revelar si el usuario existe",
+    "ok": true,
+    "detalle": "Correo o contraseña incorrectos."
+  },
+  {
+    "prueba": "paciente en /api/usuarios (admin) -> 403",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "paciente registrando resultados -> 403",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "paciente viendo la solicitud de otro paciente -> 403",
+    "ok": true,
+    "detalle": "Solo puede consultar sus propias solicitudes."
+  },
+  {
+    "prueba": "médico multirrol como PACIENTE ve solo lo suyo",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "X-Rol-Activo con un rol no asignado -> 403",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "administrador en /api/usuarios -> 200",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "limitador de login responde 429 ante ráfagas",
+    "ok": true,
+    "detalle": "24x401, 16x429"
+  },
+  {
+    "prueba": "SOAP con clave inválida -> Fault 401",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "SOAP con clave válida -> 200",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "SOAP con entidad externa (XXE) -> rechazado",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "prueba": "webhook de Stripe con firma falsa -> 400",
+    "ok": true,
+    "detalle": ""
+  }
+]

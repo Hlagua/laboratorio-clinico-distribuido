@@ -1,0 +1,63 @@
+# Mismo archivo en ambas VM; lo que cambia está en infra/.env:
+#   VM1: VM_NOMBRE=vm1  API_A=api1  API_B=api2
+#   VM2: VM_NOMBRE=vm2  API_A=api3  API_B=api4
+# Levantar:  docker compose up -d --build
+name: laboratorio
+
+x-api: &api
+  build: ../api
+  image: laboratorio-api:1          # una sola imagen para las dos APIs de la VM
+  env_file: ../api/.env
+  restart: unless-stopped
+  expose: ["8000"]
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+services:
+  api_a:
+    <<: *api
+    container_name: ${API_A}
+    hostname: ${API_A}
+    environment:
+      INSTANCIA: ${API_A}
+      NOTIFICADOR_ACTIVO: "true"       # una instancia por VM envía correos (son seguras en paralelo)
+
+  api_b:
+    <<: *api
+    container_name: ${API_B}
+    hostname: ${API_B}
+    environment:
+      INSTANCIA: ${API_B}
+      NOTIFICADOR_ACTIVO: "false"
+
+  sincronizador:
+    build: ../sync-worker
+    image: laboratorio-sync:1
+    container_name: sync-${VM_NOMBRE}
+    env_file: ../sync-worker/.env
+    environment:
+      SYNC_INSTANCIA: sync-${VM_NOMBRE}   # solo una de las dos VM es líder a la vez
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx-${VM_NOMBRE}
+    depends_on: [api_a, api_b]
+    restart: unless-stopped
+    # 80/443 de la VM son de Apache (Unidad 2, no se toca): el Azure Load
+    # Balancer traduce 443->8443 y 80->8080 (decisión D10 de la bitácora).
+    ports: ["8080:80", "8443:443"]
+    environment:
+      DOMINIO: ${DOMINIO}
+      VM_NOMBRE: ${VM_NOMBRE}
+      ACME_OTRA_VM: ${OTRA_VM_IP}:8080         # reto de Let's Encrypt compartido entre VM
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./letsencrypt:/etc/letsencrypt:ro      # certificados propios, aislados de /etc/letsencrypt
+      - ./certbot-www:/var/www/certbot:ro      # archivos del reto HTTP-01
+      - ../web/portal:/usr/share/nginx/html/portal:ro     # build de Flutter Web
+      - ../web/admin:/usr/share/nginx/html/admin:ro       # build de Angular

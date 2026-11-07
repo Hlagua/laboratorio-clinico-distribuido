@@ -1,0 +1,180 @@
+{
+  "hora": "20:12:56",
+  "supabase": [
+    {
+      "tabla": "persona",
+      "azure_filas": 16,
+      "supabase_filas": 16,
+      "igual": true
+    },
+    {
+      "tabla": "usuario",
+      "azure_filas": 15,
+      "supabase_filas": 15,
+      "igual": true
+    },
+    {
+      "tabla": "rol",
+      "azure_filas": 4,
+      "supabase_filas": 4,
+      "igual": true
+    },
+    {
+      "tabla": "permiso",
+      "azure_filas": 12,
+      "supabase_filas": 12,
+      "igual": true
+    },
+    {
+      "tabla": "rol_permiso",
+      "azure_filas": 18,
+      "supabase_filas": 18,
+      "igual": true
+    },
+    {
+      "tabla": "usuario_rol",
+      "azure_filas": 16,
+      "supabase_filas": 16,
+      "igual": true
+    },
+    {
+      "tabla": "paciente",
+      "azure_filas": 12,
+      "supabase_filas": 12,
+      "igual": true
+    },
+    {
+      "tabla": "medico",
+      "azure_filas": 2,
+      "supabase_filas": 2,
+      "igual": true
+    },
+    {
+      "tabla": "laboratorista",
+      "azure_filas": 2,
+      "supabase_filas": 2,
+      "igual": true
+    },
+    {
+      "tabla": "categoria_examen",
+      "azure_filas": 4,
+      "supabase_filas": 4,
+      "igual": true
+    },
+    {
+      "tabla": "tipo_examen",
+      "azure_filas": 8,
+      "supabase_filas": 8,
+      "igual": true
+    },
+    {
+      "tabla": "parametro_examen",
+      "azure_filas": 17,
+      "supabase_filas": 17,
+      "igual": true
+    },
+    {
+      "tabla": "franja_horaria",
+      "azure_filas": 96,
+      "supabase_filas": 96,
+      "igual": true
+    },
+    {
+      "tabla": "cita",
+      "azure_filas": 25,
+      "supabase_filas": 25,
+      "igual": true
+    },
+    {
+      "tabla": "solicitud_examen",
+      "azure_filas": 10,
+      "supabase_filas": 10,
+      "igual": true
+    },
+    {
+      "tabla": "solicitud_detalle",
+      "azure_filas": 18,
+      "supabase_filas": 18,
+      "igual": true
+    },
+    {
+      "tabla": "resultado",
+      "azure_filas": 12,
+      "supabase_filas": 12,
+      "igual": true
+    },
+    {
+      "tabla": "resultado_valor",
+      "azure_filas": 33,
+      "supabase_filas": 33,
+      "igual": true
+    },
+    {
+      "tabla": "observacion_medica",
+      "azure_filas": 4,
+      "supabase_filas": 4,
+      "igual": true
+    },
+    {
+      "tabla": "tratamiento",
+      "azure_filas": 5,
+      "supabase_filas": 5,
+      "igual": true
+    },
+    {
+      "tabla": "pago",
+      "azure_filas": 14,
+      "supabase_filas": 14,
+      "igual": true
+    },
+    {
+      "tabla": "reembolso",
+      "azure_filas": 1,
+      "supabase_filas": 1,
+      "igual": true
+    }
+  ],
+  "mongodb": [
+    {
+      "tabla": "auditoria",
+      "coleccion": "auditoria",
+      "azure": 200,
+      "mongo": 200,
+      "igual": true
+    },
+    {
+      "tabla": "notificacion",
+      "coleccion": "notificaciones",
+      "azure": 20,
+      "mongo": 20,
+      "igual": true
+    },
+    {
+      "tabla": "resultado",
+      "coleccion": "resultados",
+      "azure": 12,
+      "mongo": 12,
+      "igual": true
+    },
+    {
+      "tabla": "pago",
+      "coleccion": "pagos",
+      "azure": 14,
+      "mongo": 14,
+      "igual": true
+    },
+    {
+      "tabla": "stripe_evento",
+      "coleccion": "stripe_eventos",
+      "azure": 0,
+      "mongo": 0,
+      "igual": true
+    }
+  ],
+  "versiones": {
+    "azure": 362,
+    "supabase": 362,
+    "mongodb": 362
+  },
+  "diferencias": 0
+}

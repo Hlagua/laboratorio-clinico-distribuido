@@ -1,0 +1,28 @@
+== Operaciones publicadas en el WSDL ==
+  https://labclinico-henry.chilecentral.cloudapp.azure.com/soap
+   - ConsultarResultados
+   - ConsultarEstadoSolicitud
+   - ListarExamenes
+
+== ListarExamenes ==
+  HEM-BH     Biometría hemática           USD   8.00  ayuno=False
+  QS-CRE     Creatinina                   USD   4.00  ayuno=False
+  UR-EMO     Examen de orina (EMO)        USD   5.00  ayuno=False
+  QS-GLU     Glucosa en ayunas            USD   3.50  ayuno=True
+  QS-LIP     Perfil lipídico              USD  15.00  ayuno=True
+  IN-PCR     Proteína C reactiva          USD   9.00  ayuno=False
+  IN-TSH     TSH                          USD  12.00  ayuno=False
+  QS-URE     Urea                         USD   4.00  ayuno=False
+
+== ConsultarEstadoSolicitud(SOL-2026-000001) ==
+  estado=COMPLETADA total=11.50 pagado=True exámenes listos=2/2
+
+== ConsultarResultados(SOL-2026-000001) ==
+  Paciente: Pedro Castillo Vega (1800000011)  Estado: COMPLETADA
+  [HEM-BH] Biometría hemática - RESULTADO_LISTO
+      Hemoglobina            14.8 g/dL       ref: 12 - 17.5
+      Hematocrito              44 %          ref: 36 - 52
+      Leucocitos              7.2 x10^3/uL   ref: 4.5 - 11
+      Plaquetas               260 x10^3/uL   ref: 150 - 450
+  [QS-GLU] Glucosa en ayunas - RESULTADO_LISTO
+      Glucosa                 118 mg/dL      ref: 70 - 100  <-- fuera de rango

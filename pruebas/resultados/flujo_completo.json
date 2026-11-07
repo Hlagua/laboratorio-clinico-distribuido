@@ -1,0 +1,96 @@
+{
+  "solicitud": "SOL-2026-000009",
+  "pasos": [
+    {
+      "hora": "20:11:03",
+      "paso": "paciente registrado e inicia sesión",
+      "cedula": "1758716532",
+      "email": "henrylagua1+paciente3479@gmail.com"
+    },
+    {
+      "hora": "07:30:00",
+      "paso": "cita reservada",
+      "cita_id": 31,
+      "fecha": "2026-11-06",
+      "estado": "PENDIENTE_PAGO"
+    },
+    {
+      "hora": "20:11:13",
+      "paso": "solicitud de exámenes creada",
+      "codigo": "SOL-2026-000009",
+      "total": 11.5,
+      "estado": "REGISTRADA"
+    },
+    {
+      "hora": "20:11:16",
+      "paso": "sesión real de Stripe Checkout creada (modo prueba)",
+      "session_id": "cs_test_b17HvvlnNsSVXYuCaOL2IKCPI6lJubhRPFPl5Di89UQkS3XKaBwGCtGLVm",
+      "url": "https://checkout.stripe.com/c/pay/cs_test_b17HvvlnNsSVXYuCaO…"
+    },
+    {
+      "hora": "20:11:18",
+      "paso": "pago por transferencia registrado (QR generado)",
+      "referencia": "TRX-11777137",
+      "qr_bytes": 1274
+    },
+    {
+      "hora": "20:11:22",
+      "paso": "administrador confirma la transferencia",
+      "pago_id": 12,
+      "estado": "APROBADO"
+    },
+    {
+      "hora": "20:11:24",
+      "paso": "la cita queda confirmada",
+      "estado": "CONFIRMADA"
+    },
+    {
+      "hora": "20:11:31",
+      "paso": "laboratorista registra HEM-BH",
+      "resultado_id": 9
+    },
+    {
+      "hora": "20:11:33",
+      "paso": "laboratorista registra QS-GLU",
+      "resultado_id": 10
+    },
+    {
+      "hora": "20:11:43",
+      "paso": "médico registra observación y tratamiento",
+      "tratamiento_id": 4
+    },
+    {
+      "hora": "20:11:46",
+      "paso": "paciente consulta sus resultados",
+      "estado": "COMPLETADA",
+      "fuera_de_rango": [
+        "Glucosa"
+      ]
+    },
+    {
+      "hora": "20:11:48",
+      "paso": "paciente descarga el PDF",
+      "bytes": 2911,
+      "archivo": "flujo_completo_SOL-2026-000009.pdf"
+    },
+    {
+      "hora": "20:11:49",
+      "paso": "paciente ve su tratamiento",
+      "tratamientos": 1
+    },
+    {
+      "hora": "20:11:58",
+      "paso": "réplica comprobada",
+      "supabase": "COMPLETADA",
+      "mongo_documento": true,
+      "segundos": 7
+    },
+    {
+      "hora": "20:12:14",
+      "paso": "correos al paciente",
+      "RESULTADO_LISTO": "ENVIADA",
+      "PAGO_APROBADO": "ENVIADA",
+      "CITA_RESERVADA": "ENVIADA"
+    }
+  ]
+}

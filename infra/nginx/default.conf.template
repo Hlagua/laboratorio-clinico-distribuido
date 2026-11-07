@@ -1,0 +1,100 @@
+# Plantilla: la imagen oficial de nginx reemplaza ${DOMINIO} y ${VM_NOMBRE}
+# al arrancar (variables de entorno definidas en docker-compose.yml).
+
+upstream apis {
+    # Las dos APIs de esta VM. Si una deja de responder, Nginx la saca
+    # 10 s y reintenta la petición en la otra (solo errores de conexión,
+    # nunca reenvía un POST que ya llegó a la API).
+    #
+    # "resolve" + resolver de Docker: los nombres se vuelven a resolver cada
+    # 5 s. Sin esto Nginx guarda la IP del arranque y, si un contenedor se
+    # recrea con otra IP, sigue enviando tráfico a una dirección muerta.
+    zone apis 64k;
+    resolver 127.0.0.11 valid=5s ipv6=off;
+    server api_a:8000 max_fails=2 fail_timeout=10s resolve;
+    server api_b:8000 max_fails=2 fail_timeout=10s resolve;
+    keepalive 16;
+}
+
+# Protección contra fuerza bruta: 10 logins/min por IP (ráfaga de 5) en cada VM.
+limit_req_zone $binary_remote_addr zone=login:10m rate=10r/m;
+limit_req_status 429;
+
+# HTTP: solo la sonda del Azure Load Balancer y redirección a HTTPS.
+server {
+    listen 80;
+    server_name _;
+
+    location = /health {
+        access_log off;
+        proxy_pass http://apis;
+        proxy_set_header Host $host;
+    }
+
+    # Reto HTTP-01 de Let's Encrypt. El balanceador puede enviar la
+    # validación a cualquier VM: si el archivo no está aquí, se pide a la
+    # otra VM por la red privada (una sola vez, para no crear un bucle).
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri @acme_otra_vm;
+    }
+    location @acme_otra_vm {
+        if ($http_x_acme_reenviado) { return 404; }
+        proxy_set_header X-Acme-Reenviado 1;
+        proxy_connect_timeout 2s;
+        proxy_pass http://${ACME_OTRA_VM};
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMINIO};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMINIO}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMINIO}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-VM "${VM_NOMBRE}" always;          # evidencia del balanceo entre VM
+
+    client_max_body_size 2m;
+
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_connect_timeout 3s;
+    proxy_read_timeout 60s;
+    proxy_next_upstream error timeout http_502;
+
+    location = /api/auth/login {
+        limit_req zone=login burst=5 nodelay;
+        proxy_pass http://apis;
+    }
+    location /api/ { proxy_pass http://apis; }
+    location /soap { proxy_pass http://apis; }
+    location = /health { proxy_pass http://apis; }
+
+    # Sistema transaccional (Angular)
+    location /admin/ {
+        alias /usr/share/nginx/html/admin/;
+        try_files $uri $uri/ /admin/index.html;
+    }
+
+    # Portal público de pacientes (Flutter Web)
+    location / {
+        root /usr/share/nginx/html/portal;
+        try_files $uri $uri/ /index.html;
+    }
+}

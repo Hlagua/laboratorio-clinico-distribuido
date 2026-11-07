@@ -1,0 +1,202 @@
+{
+  "duracion_s": 60,
+  "antes": {
+    "mis_solicitudes": [
+      200,
+      "azure",
+      "api1"
+    ],
+    "catalogo": [
+      200,
+      "azure",
+      "api3"
+    ],
+    "escritura_cita": [
+      409,
+      "DUPLICADO"
+    ]
+  },
+  "durante": [
+    {
+      "mis_solicitudes": [
+        200,
+        "supabase",
+        "api2"
+      ],
+      "catalogo": [
+        200,
+        "supabase",
+        "api4"
+      ],
+      "escritura_cita": [
+        503,
+        "MODO_CONTINGENCIA"
+      ]
+    },
+    {
+      "mis_solicitudes": [
+        200,
+        "supabase",
+        "api2"
+      ],
+      "catalogo": [
+        200,
+        "supabase",
+        "api4"
+      ],
+      "escritura_cita": [
+        503,
+        "MODO_CONTINGENCIA"
+      ]
+    },
+    {
+      "mis_solicitudes": [
+        200,
+        "supabase",
+        "api3"
+      ],
+      "catalogo": [
+        200,
+        "supabase",
+        "api1"
+      ],
+      "escritura_cita": [
+        503,
+        "MODO_CONTINGENCIA"
+      ]
+    }
+  ],
+  "despues": {
+    "mis_solicitudes": [
+      200,
+      "azure",
+      "api3"
+    ],
+    "catalogo": [
+      200,
+      "azure",
+      "api2"
+    ],
+    "escritura_cita": [
+      409,
+      "DUPLICADO"
+    ]
+  },
+  "eventos": [
+    {
+      "hora": "16:50:13",
+      "evento": "login normal",
+      "estado": 200,
+      "instancia": "api3"
+    },
+    {
+      "hora": "16:50:18",
+      "evento": "ANTES de la caída",
+      "mis_solicitudes": [
+        200,
+        "azure",
+        "api1"
+      ],
+      "catalogo": [
+        200,
+        "azure",
+        "api3"
+      ],
+      "escritura_cita": [
+        409,
+        "DUPLICADO"
+      ]
+    },
+    {
+      "hora": "16:50:28",
+      "evento": "regla temporal: salida hacia Azure SQL BLOQUEADA en ambas VM"
+    },
+    {
+      "hora": "16:50:33",
+      "evento": "sesiones de app_api/app_sync cerradas",
+      "cantidad": 6
+    },
+    {
+      "hora": "16:50:41",
+      "evento": "login DURANTE la caída",
+      "estado": 200,
+      "instancia": "api3"
+    },
+    {
+      "hora": "16:51:18",
+      "evento": "DURANTE la caída (1)",
+      "mis_solicitudes": [
+        200,
+        "supabase",
+        "api2"
+      ],
+      "catalogo": [
+        200,
+        "supabase",
+        "api4"
+      ],
+      "escritura_cita": [
+        503,
+        "MODO_CONTINGENCIA"
+      ]
+    },
+    {
+      "hora": "16:51:30",
+      "evento": "DURANTE la caída (2)",
+      "mis_solicitudes": [
+        200,
+        "supabase",
+        "api2"
+      ],
+      "catalogo": [
+        200,
+        "supabase",
+        "api4"
+      ],
+      "escritura_cita": [
+        503,
+        "MODO_CONTINGENCIA"
+      ]
+    },
+    {
+      "hora": "16:51:51",
+      "evento": "DURANTE la caída (3)",
+      "mis_solicitudes": [
+        200,
+        "supabase",
+        "api3"
+      ],
+      "catalogo": [
+        200,
+        "supabase",
+        "api1"
+      ],
+      "escritura_cita": [
+        503,
+        "MODO_CONTINGENCIA"
+      ]
+    },
+    {
+      "hora": "16:52:02",
+      "evento": "regla temporal eliminada: Azure SQL vuelve a estar accesible"
+    },
+    {
+      "hora": "16:52:22",
+      "evento": "DESPUÉS (recuperado en ~8 s)",
+      "mis_solicitudes": [
+        200,
+        "azure",
+        "api3"
+      ],
+      "catalogo": [
+        200,
+        "azure",
+        "api2"
+      ],
+      "escritura_cita": [
+        409,
+        "DUPLICADO"
+      ]
+    }
+  ]
+}

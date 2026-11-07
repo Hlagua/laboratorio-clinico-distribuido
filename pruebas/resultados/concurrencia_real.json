@@ -1,0 +1,214 @@
+{
+  "eventos": [
+    {
+      "hora": "00:51:18",
+      "mensaje": "=== INICIANDO PRUEBA DE CONCURRENCIA, COBROS Y REVERSOS EN VIVO ===",
+      "datos": {}
+    },
+    {
+      "hora": "00:51:31",
+      "mensaje": "Fase 1: Creación simultánea de 3 cuentas de pacientes",
+      "datos": {}
+    },
+    {
+      "hora": "00:51:36",
+      "mensaje": "Paciente registrado con éxito",
+      "datos": {
+        "email": "henrylagua1+conc_95731@gmail.com",
+        "cedula": "1742663691"
+      }
+    },
+    {
+      "hora": "00:51:36",
+      "mensaje": "Paciente registrado con éxito",
+      "datos": {
+        "email": "henrylagua1+conc_84803@gmail.com",
+        "cedula": "1713536165"
+      }
+    },
+    {
+      "hora": "00:51:41",
+      "mensaje": "Paciente registrado con éxito",
+      "datos": {
+        "email": "henrylagua1+conc_86759@gmail.com",
+        "cedula": "1716724511"
+      }
+    },
+    {
+      "hora": "00:51:41",
+      "mensaje": "Fase 2: Reserva concurrente con competencia por cupos",
+      "datos": {}
+    },
+    {
+      "hora": "00:51:43",
+      "mensaje": "Franja objetivo: ID 2 (2026-11-07 07:00:00) cupos: 3",
+      "datos": {}
+    },
+    {
+      "hora": "00:51:45",
+      "mensaje": "Intento de reserva Paciente_Conc_3",
+      "datos": {
+        "status": 201,
+        "respuesta": "PENDIENTE_PAGO"
+      }
+    },
+    {
+      "hora": "00:51:45",
+      "mensaje": "Intento de reserva Paciente_Conc_2",
+      "datos": {
+        "status": 201,
+        "respuesta": "PENDIENTE_PAGO"
+      }
+    },
+    {
+      "hora": "00:51:45",
+      "mensaje": "Fase 3: Creación de solicitudes y múltiples métodos de cobro",
+      "datos": {}
+    },
+    {
+      "hora": "00:51:50",
+      "mensaje": "Solicitud 1 creada",
+      "datos": {
+        "codigo": "SOL-2026-000011",
+        "total": 17.0
+      }
+    },
+    {
+      "hora": "00:51:53",
+      "mensaje": "Solicitud 2 creada",
+      "datos": {
+        "codigo": "SOL-2026-000012",
+        "total": 8.0
+      }
+    },
+    {
+      "hora": "00:51:57",
+      "mensaje": "Pago por Transferencia registrado",
+      "datos": {
+        "pago_id": 15,
+        "ref": "TRX-EB214F73",
+        "monto": 17.0
+      }
+    },
+    {
+      "hora": "00:52:00",
+      "mensaje": "Sesión Stripe Checkout generada",
+      "datos": {
+        "session_id": "cs_test_a1XHa836t0Tj6G8xv0SWIvLNIi19lNhDrFOMQuptenbmfB4zlomXAVQXzp",
+        "url": "https://checkout.stripe.com/c/pay/cs_test_a1XHa836..."
+      }
+    },
+    {
+      "hora": "00:52:02",
+      "mensaje": "Administrador confirmó el pago",
+      "datos": {
+        "pago_id": 15,
+        "estado": "APROBADO"
+      }
+    },
+    {
+      "hora": "00:52:02",
+      "mensaje": "Fase 4: Ejecución de Reversos / Reembolsos de pago",
+      "datos": {}
+    },
+    {
+      "hora": "00:52:05",
+      "mensaje": "Reverso parcial ejecutado",
+      "datos": {
+        "reembolso_id": 2,
+        "estado_pago": "REEMBOLSO_PARCIAL",
+        "reembolsado": 3.0
+      }
+    },
+    {
+      "hora": "00:52:08",
+      "mensaje": "Reverso total completado",
+      "datos": {
+        "reembolso_id": 3,
+        "estado_pago": "REEMBOLSADO",
+        "total_reembolsado": 17.0
+      }
+    },
+    {
+      "hora": "00:52:08",
+      "mensaje": "Fase 5: Concurrencia entre Laboratorista y Médico",
+      "datos": {}
+    },
+    {
+      "hora": "00:52:20",
+      "mensaje": "Operación simultánea de SOAP finalizada",
+      "datos": {
+        "status": 401,
+        "resultado": 255
+      }
+    },
+    {
+      "hora": "00:52:20",
+      "mensaje": "Operación simultánea de MED finalizada",
+      "datos": {
+        "status": 404,
+        "resultado": 3
+      }
+    },
+    {
+      "hora": "00:52:21",
+      "mensaje": "Operación simultánea de LAB finalizada",
+      "datos": {
+        "status": 201,
+        "resultado": {
+          "resultado_id": 13
+        }
+      }
+    },
+    {
+      "hora": "00:52:21",
+      "mensaje": "Fase 6: Esperando sincronización distribuida de cobros y reversos...",
+      "datos": {}
+    },
+    {
+      "hora": "00:52:29",
+      "mensaje": "Estado final del pago auditado",
+      "datos": {
+        "estado": "REEMBOLSADO",
+        "monto": 17.0,
+        "monto_reembolsado": 17.0,
+        "num_reembolsos": 2
+      }
+    }
+  ],
+  "pago_auditado": {
+    "pago_id": 15,
+    "solicitud_id": 11,
+    "solicitud_codigo": "SOL-2026-000011",
+    "monto": 17.0,
+    "moneda": "USD",
+    "metodo": "TRANSFERENCIA_QR",
+    "estado": "REEMBOLSADO",
+    "motivo_rechazo": null,
+    "monto_reembolsado": 17.0,
+    "referencia_transferencia": "TRX-EB214F73",
+    "stripe_payment_intent_id": null,
+    "confirmado_at": "2026-11-07T00:52:01.951000",
+    "created_at": "2026-11-07T00:51:57.074000",
+    "paciente_id": 14,
+    "paciente": "Paciente_Conc_3 Prueba 95731",
+    "reembolsos": [
+      {
+        "reembolso_id": 2,
+        "monto": 3.0,
+        "motivo": "Reverso parcial solicitado por el paciente (error en cobro)",
+        "estado": "PENDIENTE",
+        "stripe_refund_id": null,
+        "created_at": "2026-11-07T00:52:04.190000"
+      },
+      {
+        "reembolso_id": 3,
+        "monto": 14.0,
+        "motivo": "Reverso total por cancelación de orden",
+        "estado": "PENDIENTE",
+        "stripe_refund_id": null,
+        "created_at": "2026-11-07T00:52:07.224000"
+      }
+    ]
+  }
+}

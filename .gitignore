@@ -1,0 +1,31 @@
+# ---- Credenciales: NUNCA al repositorio ----
+secretos/
+.env
+*.env
+!.env.example
+infra/letsencrypt/
+infra/letsencrypt-trabajo/
+infra/certbot-www/
+
+# ---- Entornos y dependencias ----
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+.dart_tool/
+.angular/
+
+# ---- Compilados (se generan con ng build / flutter build) ----
+dist/
+build/
+web-admin/dist/
+portal-pacientes/build/
+
+# ---- Herramientas locales ----
+.claude/
+.vscode/
+.idea/
+*.log
+
+# ---- Enunciado del docente (material del curso, no se publica) ----
+PROYECTO FINAL INTEGRADOR.pdf
