@@ -1,5 +1,6 @@
 """Servicio de exámenes y resultados: catálogo, solicitudes, resultados y PDF."""
 import json
+import logging
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -10,6 +11,7 @@ from ..seguridad import perfil, requiere, rol_actual, usuario_actual
 from ..validacion import cuerpo, entero, lista_enteros, texto
 
 bp = Blueprint("examenes", __name__, url_prefix="/api")
+log = logging.getLogger("api")
 
 SQL_SOLICITUDES = """
 SELECT s.solicitud_id, s.codigo, s.estado, s.total, s.observaciones, s.created_at, s.cita_id,
@@ -180,12 +182,22 @@ def registrar_resultado():
     for v in valores:
         if not isinstance(v, dict) or not isinstance(v.get("parametro_id"), int) or (v.get("valor") is None and not v.get("texto")):
             raise ApiError("Cada valor requiere parametro_id y 'valor' numérico o 'texto'.", 422, "TIPO_INVALIDO")
+    detalle_id = entero(d, "detalle_id")
     resultado_id = db.ejecutar_sp(
-        "sp_registrar_resultado", "resultado_id", detalle_id=entero(d, "detalle_id"),
+        "sp_registrar_resultado", "resultado_id", detalle_id=detalle_id,
         laboratorista_id=perfil("laboratorista_id"), valores=json.dumps(valores),
         observaciones=texto(d, "observaciones", False, 1000), usuario_id=usuario_actual()["usuario_id"],
         instancia_api=config.INSTANCIA)
-    return jsonify(resultado_id=resultado_id), 201
+    # La base de conocimientos revisa la solicitud con el nuevo resultado. Es
+    # complementaria: si falla, el resultado ya quedó guardado igual.
+    sugerencias = None
+    try:
+        from .conocimiento import evaluar_y_registrar
+        solicitud = db.leer_uno("SELECT solicitud_id FROM {e}.solicitud_detalle WHERE detalle_id = ?", detalle_id)
+        sugerencias = evaluar_y_registrar(solicitud["solicitud_id"])
+    except Exception as e:
+        log.warning('{"evento":"base_conocimiento_error","detalle_id":%s,"error":"%s"}', detalle_id, str(e).replace('"', "'")[:200])
+    return jsonify(resultado_id=resultado_id, sugerencias_nuevas=sugerencias), 201
 
 
 @bp.post("/solicitudes/detalle/<int:detalle_id>/muestra")

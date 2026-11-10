@@ -18,6 +18,7 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | VIII. Servicios externos (Mailjet, Stripe) | ✅ Correo real enviado · ✅ webhook de Stripe registrado · ⏳ falta un pago completo desde Checkout | `notificaciones.py`, `pagos.py` |
 | IX. Seguridad y despliegue | ✅ DuckDNS + HTTPS real + Load Balancer + roles + limitador | `infra/` |
 | X. Pruebas experimentales | ✅ Las 10 pruebas en la nube con evidencias | `docs/05-pruebas-experimentales.md`, `pruebas/` |
+| Extra: base de conocimientos para diagnósticos | ✅ Desplegada en la nube; 18/18 pruebas | `docs/06-base-conocimiento.md`, `07_base_conocimiento.sql`, `conocimiento.py` |
 
 ## 2. Infraestructura
 
@@ -80,6 +81,10 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D29 | **DuckDNS como dominio principal** y el dominio de Azure como respaldo en el mismo certificado | Cumple la rúbrica (DuckDNS) sin perder un acceso alternativo. Con HTTP-01 no se necesita el token de DuckDNS para renovar. | Solo uno de los dos |
 | D30 | Sin `X-Rol-Activo`, la API usa el rol de **menor privilegio** permitido | Es lo más seguro para una persona multirrol; los clientes envían siempre el rol activo. | Usar el rol de mayor privilegio |
 | D31 | Repositorio **público** en GitHub sin credenciales ni el enunciado del docente | El equipo necesita ver las investigaciones, decisiones y evidencias. Los secretos viven solo en `secretos/` y en los `.env` (excluidos); antes de publicar se escanearon los 155 archivos buscando cada valor real de credencial y patrones de claves. El PDF del enunciado es material del curso. | Repositorio privado |
+| D32 | Base de conocimientos como **sistema experto basado en reglas**, sin IA | Lo pidió el equipo ("sin lo de la IA"). Las reglas son explicables (cada sugerencia muestra el valor que la disparó), deterministas y comprobables; no cuestan por consulta y no sacan datos clínicos de la plataforma. | Modelo de lenguaje o modelo entrenado |
+| D33 | El sistema **sugiere** y el médico decide; la precisión se mide con sus respuestas | Responsabilidad clínica del médico. Aceptar enlaza el tratamiento y descartar exige un motivo; aceptadas / respondidas da la precisión de cada regla, para afinarla o desactivarla. | Diagnóstico automático |
+| D34 | Reglas, diagnósticos y sugerencias en **Azure SQL** (replicados a Supabase); guías clínicas en **MongoDB** | Las reglas son relacionales y transaccionales (FK al parámetro del examen y a la solicitud), y en contingencia se siguen leyendo. Las guías son documentos de estructura libre. | Todo en Mongo; todo en SQL |
+| D35 | Al agregar tablas a la réplica, **forzar una carga completa** (borrar `sync_estado`) | El sincronizador guarda una sola versión por destino. Si ya pasó la versión en que se cargaron las tablas nuevas, no las ve como cambios. La carga completa es idempotente (upserts) y tardó unos 35 s. | Versión por tabla (cambio mayor en el sincronizador) |
 
 ## 5. Registro cronológico
 
@@ -256,6 +261,33 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 - `docs/capturas/`: 8 capturas de las aplicaciones y 2 gráficos generados con `pruebas/graficos.py` (1 frente a 4 APIs, caída de una VM).
 - **Escaneo de secretos antes de publicar:** encontró la clave SOAP escrita en `pruebas/concurrencia_real.py` (script nuevo del equipo). Se reemplazó por `c["SOAP_API_KEY"]` y se corrigió el XML para enviar la clave dentro de `<lab:Credencial>`, como define el WSDL; sin eso la API respondía 401. Escaneo final: 0 secretos.
 
+### 2026-11-09 — Base de conocimientos para diagnósticos (sin IA)
+- Pedido del ingeniero; el equipo eligió la opción "sin lo de la IA" (D32–D34). Detalle en `docs/06-base-conocimiento.md`.
+- **Azure SQL** (`07_base_conocimiento.sql`):
+  - 5 tablas con Change Tracking, la vista de precisión y 3 procedimientos;
+  - semilla: 10 diagnósticos CIE-10 con protocolo y 11 reglas.
+- **Supabase:** `03_base_conocimiento.sql`, con tablas espejo y RLS.
+- **MongoDB:** 5 guías clínicas en `laboratorio.guias_clinicas`.
+- **API** (`/api/conocimiento`): motor de reglas, sugerencias, respuesta del médico, administración de reglas y guías. Registrar un resultado dispara la evaluación.
+- **Angular:** panel de sugerencias en el detalle de la solicitud; página "Base de conocimientos".
+- **Despliegue:** nuevo script `infra/desplegar.sh`, reutilizable; ambas VM actualizadas con health OK.
+- **Fallos encontrados y corregidos:**
+  - `sp_guardar_regla` reutilizaba el id de salida de la llamada anterior y sobrescribía una regla. Ahora se pone a NULL al empezar.
+  - Una regla de TSH tenía la lógica mal escrita.
+  - El motor fallaba con condiciones sin `valor2`.
+  - Los códigos 5008x devolvían 400; ahora tienen su estado HTTP.
+  - El script de guías escribía en la base de la URL en vez de `laboratorio`.
+  - **Réplica:** el sincronizador viejo ya había avanzado la versión de Supabase hasta 412 antes del redespliegue, así que las filas semilla de las tablas nuevas (versiones 399–412) no se replicaban. Se forzó una carga completa (D35): 421 filas en Supabase y 348 documentos en Mongo, en modo COMPLETA.
+- **La IP pública del equipo cambió a 186.42.9.27:**
+  - Se agregó la regla de firewall `pc-equipo-2026-11-09` en Azure SQL.
+  - Se actualizó la regla propia `lab-vm2-nsg/SSH-solo-equipo`.
+  - Atlas no tiene la IP nueva, así que las guías se cargaron desde la VM1 con un contenedor `mongo:8.0` temporal.
+- **Pruebas:**
+  - local: 25/25;
+  - en la nube: `pruebas/base_conocimiento.py` **18/18**;
+  - réplica en Supabase: **27/27 tablas iguales** (versión 431). `verificar_replicacion.py` ya incluye las 5 tablas nuevas.
+- Capturas 09–11 en `docs/capturas/`.
+
 ## 6. Pendientes
 
 **Necesito del equipo:**
@@ -286,5 +318,6 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 - [x] Flujo completo en la nube (script, con pago por transferencia). Queda por hacer desde el portal: registro → cita → exámenes → pago con Stripe (tarjeta 4242…, lo hace una persona en el navegador) → resultados del laboratorista → observación y tratamiento del médico → PDF.
 - [x] Fase X: las 10 pruebas con evidencias (`docs/05`).
 - [ ] Pago completo con Stripe Checkout desde el portal (lo hace un usuario en el navegador).
+- [ ] Agregar la IP 186.42.9.27 en Atlas → Network Access, si se van a correr desde el PC las pruebas que leen MongoDB (`verificar_replicacion.py`, `flujo_completo.py`).
 - [ ] Decidir D21: ¿pagar unos 5 USD al mes por la base en Chile Central? (opcional). Si no, eliminar el servidor vacío `lab-sql-chile-henry`.
 - [x] Informe técnico final (`docs/00-informe-tecnico.md`).

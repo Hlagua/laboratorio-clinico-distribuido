@@ -16,7 +16,8 @@ from comun import ahora, azure_sql_admin, credenciales, guardar
 
 TABLAS = ["persona", "usuario", "rol", "permiso", "rol_permiso", "usuario_rol", "paciente", "medico", "laboratorista",
           "categoria_examen", "tipo_examen", "parametro_examen", "franja_horaria", "cita", "solicitud_examen",
-          "solicitud_detalle", "resultado", "resultado_valor", "observacion_medica", "tratamiento", "pago", "reembolso"]
+          "solicitud_detalle", "resultado", "resultado_valor", "observacion_medica", "tratamiento", "pago", "reembolso",
+          "diagnostico", "protocolo", "regla_diagnostica", "regla_condicion", "sugerencia_diagnostica"]
 
 c = credenciales()
 az = azure_sql_admin()

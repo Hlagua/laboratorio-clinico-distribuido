@@ -1,0 +1,113 @@
+[
+  {
+    "hora": "03:35:04",
+    "ok": true,
+    "prueba": "motor de reglas evalúa las solicitudes con resultados",
+    "solicitudes": 8,
+    "sugerencias": 6
+  },
+  {
+    "hora": "03:35:31",
+    "ok": true,
+    "prueba": "re-evaluar es idempotente (no duplica sugerencias)",
+    "nuevas": 0
+  },
+  {
+    "hora": "03:35:45",
+    "ok": true,
+    "prueba": "la sugerencia explica qué valores la dispararon",
+    "cie10": "R73.0",
+    "explicacion": "Glucosa 118 mg/dL (entre 100 y 125.9)"
+  },
+  {
+    "hora": "03:35:47",
+    "ok": true,
+    "prueba": "reglas con condiciones y precisión",
+    "reglas": 11
+  },
+  {
+    "hora": "03:35:48",
+    "ok": true,
+    "prueba": "diagnósticos CIE-10 con protocolo",
+    "diagnosticos": 10
+  },
+  {
+    "hora": "03:35:51",
+    "ok": true,
+    "prueba": "guía clínica desde MongoDB Atlas",
+    "titulo": "Alteraciones de la glucosa en ayunas"
+  },
+  {
+    "hora": "03:35:53",
+    "ok": true,
+    "prueba": "guía inexistente -> 404"
+  },
+  {
+    "hora": "03:35:56",
+    "ok": true,
+    "prueba": "el médico responde la sugerencia (403 si no es su paciente)",
+    "estado": 200,
+    "nuevo_estado": "DESCARTADA"
+  },
+  {
+    "hora": "03:35:57",
+    "ok": true,
+    "prueba": "una sugerencia ya respondida no se vuelve a responder",
+    "estado": 409
+  },
+  {
+    "hora": "03:35:58",
+    "ok": true,
+    "prueba": "médico no crea reglas -> 403"
+  },
+  {
+    "hora": "03:36:00",
+    "ok": true,
+    "prueba": "laboratorista no ve reglas -> 403"
+  },
+  {
+    "hora": "03:36:00",
+    "ok": true,
+    "prueba": "sin token -> 401"
+  },
+  {
+    "hora": "03:36:01",
+    "ok": true,
+    "prueba": "regla inválida (ENTRE sin valor2) -> 422"
+  },
+  {
+    "hora": "03:36:17",
+    "ok": true,
+    "prueba": "réplica Supabase diagnostico",
+    "azure": 10,
+    "supabase": 10
+  },
+  {
+    "hora": "03:36:17",
+    "ok": true,
+    "prueba": "réplica Supabase protocolo",
+    "azure": 10,
+    "supabase": 10
+  },
+  {
+    "hora": "03:36:17",
+    "ok": true,
+    "prueba": "réplica Supabase regla_diagnostica",
+    "azure": 11,
+    "supabase": 11
+  },
+  {
+    "hora": "03:36:18",
+    "ok": true,
+    "prueba": "réplica Supabase regla_condicion",
+    "azure": 15,
+    "supabase": 15
+  },
+  {
+    "hora": "03:36:18",
+    "ok": true,
+    "prueba": "réplica Supabase sugerencia_diagnostica",
+    "azure": 6,
+    "supabase": 6
+  }
+]

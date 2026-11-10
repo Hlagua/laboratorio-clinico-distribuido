@@ -14,6 +14,7 @@ const MENU: Enlace[] = [
   { ruta: '/pagos', texto: 'Pagos y reembolsos', roles: ['ADMIN'] },
   { ruta: '/usuarios', texto: 'Usuarios y roles', roles: ['ADMIN'] },
   { ruta: '/catalogo', texto: 'Catálogo y franjas', roles: ['ADMIN'] },
+  { ruta: '/conocimiento', texto: 'Base de conocimientos', roles: ['MEDICO', 'ADMIN'] },
   { ruta: '/reportes', texto: 'Reportes', roles: ['ADMIN', 'MEDICO'] },
   { ruta: '/auditoria', texto: 'Auditoría y correos', roles: ['ADMIN'] },
 ];

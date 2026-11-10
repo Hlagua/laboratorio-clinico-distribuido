@@ -129,6 +129,14 @@ flowchart TB
 ### 3.3 Servicios
 Siete servicios REST, cada uno con su prefijo y contrato: autenticación, citas, exámenes y resultados, pagos, tratamientos, notificaciones y administración. A ellos se suma un **servicio SOAP 1.1** con WSDL publicado y 3 operaciones. Ver el documento 04.
 
+### 3.4 Base de conocimientos para diagnósticos
+Es un sistema experto **basado en reglas, sin IA**. Al registrar un resultado, el motor compara los valores con 11 reglas clínicas (umbrales de ADA, OMS, ESC/EAS, ATA y KDIGO, con lógica TODAS/ALGUNA y filtros de sexo y edad) y **sugiere** diagnósticos CIE-10 al médico.
+- Cada sugerencia trae la explicación del valor que la disparó, el protocolo de tratamiento y una guía clínica guardada en MongoDB.
+- El médico acepta (con un tratamiento rellenado desde el protocolo) o descarta con motivo; esas respuestas dan la precisión de cada regla.
+- Reglas y sugerencias viven en Azure SQL y se replican a Supabase.
+
+Ver el documento 06.
+
 ## 4. Implementación
 
 ### 4.1 Mecanismos distribuidos
@@ -172,12 +180,13 @@ Todas las pruebas se ejecutaron en la nube. Los scripts y evidencias están en `
 | 4 | Caída de una API | 16/16 peticiones atendidas por las otras 3 |
 | 5 | Caída de una VM (`az vm stop`) | 131/133; solo falló la petición que estaba en curso |
 | 6–7 | Caída de Azure SQL | Lecturas desde Supabase y escrituras con 503; **recuperación automática en ~8 s** |
-| 8 | Consistencia de la réplica | 22/22 tablas en Supabase y 5/5 colecciones en Mongo; la misma versión de Change Tracking |
+| 8 | Consistencia de la réplica | 27/27 tablas en Supabase (22 al cierre de la fase X) y 5/5 colecciones en Mongo; la misma versión de Change Tracking |
 | 9 | REST y SOAP | Cliente SOAP independiente: las 3 operaciones; REST cubierto por todas las pruebas |
 | 10 | Seguridad y roles | **17/17** sobre `labclinico-uta.duckdns.org` |
 | — | **Flujo completo** (`flujo_completo.py`) | Registro → cita → exámenes → sesión real de Stripe → transferencia confirmada → resultados → observación y tratamiento → PDF. **Réplica en 4 s** y **3 correos reales enviados** por Mailjet |
 | — | Relevo del sincronizador | El líder detenido es reemplazado en ~38 s; un cambio se replica a Mongo en ~14 s |
 | — | Integración local de la API | 56/56 verificaciones |
+| — | Base de conocimientos (`base_conocimiento.py`) | **18/18** en la nube: sugerencias explicadas, idempotencia, respuesta del médico (409 al repetir), permisos, guía desde Atlas y réplica igual en las 5 tablas. Local: 25/25 |
 
 ## 6. Limitaciones, fallos encontrados y acciones tomadas
 
@@ -225,7 +234,7 @@ Las pruebas encontraron problemas reales. Todos se corrigieron y quedaron docume
 
 ### 9.1 Estructura del repositorio
 ```
-database/      azure-sql (01–06), supabase, mongodb, ejecutar_azure_sql.py, generar_diccionario.py
+database/      azure-sql (01–07), supabase, mongodb, ejecutar_azure_sql.py, generar_diccionario.py
 sync-worker/   sincronizador (Change Tracking -> Supabase y MongoDB)
 api/           APIs Flask (REST + SOAP) + Dockerfile
 infra/         docker-compose.yml, nginx/, certificado.sh, generar_env.py, vms.ps1
@@ -252,6 +261,7 @@ secretos/      credenciales (NO se entrega ni se sube a ningún repositorio)
 python pruebas/seguridad.py
 python pruebas/flujo_completo.py
 python pruebas/verificar_replicacion.py
+python pruebas/base_conocimiento.py
 python pruebas/concurrencia.py 6 800
 python pruebas/caida_azure_sql.py 60
 locust -f pruebas/locustfile.py --host https://labclinico-uta.duckdns.org --headless -u 40 -r 10 -t 90s

@@ -145,3 +145,76 @@ export interface UsuarioAdmin {
   nombre: string;
   roles: string | null;
 }
+
+/* ---- Base de conocimientos para diagnósticos ---- */
+export interface Sugerencia {
+  sugerencia_id: number;
+  solicitud_id: number;
+  paciente_id: number;
+  estado: 'PENDIENTE' | 'ACEPTADA' | 'DESCARTADA';
+  confianza: 'BAJA' | 'MEDIA' | 'ALTA';
+  explicacion: string;
+  motivo: string | null;
+  tratamiento_id: number | null;
+  created_at: string;
+  respondida_at: string | null;
+  diagnostico_id: number;
+  codigo_cie10: string;
+  diagnostico: string;
+  regla: string;
+  recomendacion: string;
+  fuente: string | null;
+  guia_clave: string | null;
+  protocolo: string | null;
+  duracion_dias: number | null;
+  respondida_por: string | null;
+}
+
+export interface CondicionRegla {
+  parametro_id: number;
+  parametro: string;
+  unidad: string | null;
+  operador: '<' | '<=' | '>' | '>=' | 'ENTRE';
+  valor: number;
+  valor2: number | null;
+}
+
+export interface Regla {
+  regla_id: number;
+  codigo: string;
+  logica: 'TODAS' | 'ALGUNA';
+  sexo: 'M' | 'F' | null;
+  edad_min: number | null;
+  edad_max: number | null;
+  confianza: 'BAJA' | 'MEDIA' | 'ALTA';
+  recomendacion: string;
+  fuente: string | null;
+  guia_clave: string | null;
+  activa: boolean;
+  diagnostico_id: number;
+  codigo_cie10: string;
+  diagnostico: string;
+  sugerencias: number;
+  aceptadas: number;
+  descartadas: number;
+  precision_pct: number | null;
+  condiciones: CondicionRegla[];
+}
+
+export interface Diagnostico {
+  diagnostico_id: number;
+  codigo_cie10: string;
+  nombre: string;
+  descripcion: string | null;
+  protocolo: string | null;
+  duracion_dias: number | null;
+}
+
+export interface GuiaClinica {
+  _id: string;
+  titulo: string;
+  fuente: string;
+  diagnosticos: string[];
+  criterios: { parametro: string; rango: string; interpretacion: string }[];
+  secciones: { titulo: string; texto: string }[];
+}

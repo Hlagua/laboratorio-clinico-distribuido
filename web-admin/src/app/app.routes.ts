@@ -18,6 +18,10 @@ export const routes: Routes = [
   { path: 'pagos', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/pagos').then((m) => m.Pagos) },
   { path: 'usuarios', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/usuarios').then((m) => m.Usuarios) },
   { path: 'catalogo', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/catalogo').then((m) => m.Catalogo) },
+  {
+    path: 'conocimiento', canActivate: [conRol('MEDICO', 'ADMIN')],
+    loadComponent: () => import('./paginas/conocimiento').then((m) => m.Conocimiento),
+  },
   { path: 'reportes', canActivate: [conRol('ADMIN', 'MEDICO')], loadComponent: () => import('./paginas/reportes').then((m) => m.Reportes) },
   { path: 'auditoria', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/auditoria').then((m) => m.Auditoria) },
   { path: '', pathMatch: 'full', redirectTo: 'inicio' },

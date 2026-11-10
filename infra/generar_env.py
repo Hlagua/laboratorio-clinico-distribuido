@@ -53,6 +53,7 @@ escribir("api.env", {
     "MAILJET_API_KEY": c["MAILJET_API_KEY"], "MAILJET_API_SECRET": c["MAILJET_API_SECRET"],
     "MAIL_REMITENTE": c["MAIL_REMITENTE"], "MAIL_REMITENTE_NOMBRE": "Laboratorio Clinico",
     "NOTIFICADOR_INTERVALO": "10", "PERMITIR_PRUEBA_CONCURRENCIA": "false",
+    "MONGO_URI": c["MONGO_URI"], "MONGO_DB": "laboratorio",   # guías clínicas (base de conocimientos)
 })
 escribir("sync.env", {
     "AZURE_SQL_CONN": azure("app_sync", c["AZURE_SQL_APP_SYNC_PASSWORD"]).replace("Connection Timeout=8", "Connection Timeout=15"),

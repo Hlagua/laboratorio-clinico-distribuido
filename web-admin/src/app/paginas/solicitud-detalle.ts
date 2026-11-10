@@ -5,13 +5,14 @@ import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
 import { claseEstado, dinero, fechaHora, rango, textoEstado } from '../core/formato';
 import { ExamenSolicitado, Parametro, Solicitud, TipoExamen } from '../core/modelos';
+import { Sugerencias } from './sugerencias';
 
 /** Valor que el laboratorista escribe por parámetro (número o texto cualitativo). */
 interface Captura { parametro: Parametro; valor: string }
 
 @Component({
   selector: 'app-solicitud-detalle',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, Sugerencias],
   template: `
     <a routerLink="/solicitudes">← Volver a solicitudes</a>
     @if (error()) { <div class="alerta error">{{ error() }}</div> }
@@ -29,6 +30,12 @@ interface Captura { parametro: Parametro; valor: string }
       </div>
       @if (s.estado === 'REGISTRADA') {
         <div class="alerta aviso">La solicitud aún no está pagada: no se pueden registrar muestras ni resultados.</div>
+      }
+      @if (tieneResultados()) {
+        <!-- Se recrea cuando cambia el número de resultados: re-lee las sugerencias. -->
+        @for (k of [cantidadResultados()]; track k) {
+          <app-sugerencias [solicitudId]="s.solicitud_id" [pacienteId]="s.paciente_id" />
+        }
       }
 
       @for (ex of s.examenes; track ex.detalle_id) {
@@ -147,6 +154,10 @@ export class SolicitudDetalle implements OnInit {
 
   protected puedeProcesar(): boolean {
     return ['PAGADA', 'EN_PROCESO'].includes(this.s()?.estado ?? '');
+  }
+
+  protected cantidadResultados(): number {
+    return this.s()?.examenes.filter((e) => e.resultado_id).length ?? 0;
   }
 
   protected tieneResultados(): boolean {

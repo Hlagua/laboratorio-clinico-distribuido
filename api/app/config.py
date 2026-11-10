@@ -16,6 +16,9 @@ INSTANCIA = os.getenv("INSTANCIA", socket.gethostname())
 # Bases de datos
 AZURE_SQL_CONN = os.getenv("AZURE_SQL_CONN", "")
 SUPABASE_DSN = os.getenv("SUPABASE_DSN", "")          # rol lab_lectura (solo lectura)
+# Guías clínicas de la base de conocimientos (MongoDB Atlas, solo lectura)
+MONGO_URI = os.getenv("MONGO_URI", "")
+MONGO_DB = os.getenv("MONGO_DB", "laboratorio")
 
 # Circuit breaker hacia Azure SQL
 CB_TIMEOUT_CONEXION = int(os.getenv("CB_TIMEOUT_CONEXION", "3"))   # s para conectar
