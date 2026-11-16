@@ -25,7 +25,7 @@ import { AuthService } from '../core/auth';
         <button type="submit" [disabled]="cargando() || !email || !password">
           {{ cargando() ? 'Ingresando…' : 'Ingresar' }}
         </button>
-        <p class="muted pie">¿Es paciente? Use el <a href="/">portal de pacientes</a>.</p>
+        <p class="muted pie">¿Es paciente? <button type="button" class="secundario chico" (click)="irPortal()">Ir al portal de pacientes</button></p>
       </form>
     </div>
   `,
@@ -46,6 +46,10 @@ export class Login {
   protected password = '';
   protected readonly cargando = signal(false);
   protected readonly error = signal('');
+
+  irPortal() {
+    window.location.href = '/';
+  }
 
   async entrar() {
     this.cargando.set(true);

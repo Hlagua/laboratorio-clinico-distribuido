@@ -14,6 +14,7 @@ from flask import Blueprint, jsonify, request
 
 from .. import config, db
 from ..errores import ApiError
+from ..paginacion import donde, listar as listar_paginado, rango_fechas
 from ..seguridad import requiere
 from ..validacion import cuerpo, texto
 
@@ -111,15 +112,19 @@ def iniciar_notificador():
 @bp.get("")
 @requiere("ADMIN")
 def listar():
-    estado = request.args.get("estado")
+    """Filtros: ?estado, ?q (destinatario o asunto), ?desde, ?hasta; paginado con ?pagina."""
+    condiciones, params = [], []
+    if request.args.get("estado"):
+        condiciones.append("estado = ?")
+        params.append(request.args["estado"].upper())
+    if request.args.get("q"):
+        condiciones.append("(LOWER(destinatario) LIKE ? OR LOWER(asunto) LIKE ?)")
+        patron = f"%{request.args['q'].strip().lower()}%"
+        params += [patron, patron]
+    rango_fechas("created_at", condiciones, params)
     sql = ("SELECT notificacion_id, persona_id, tipo, destinatario, asunto, estado, intentos, ultimo_error, "
-           "proveedor_msg_id, created_at, enviada_at FROM {e}.notificacion")
-    params = []
-    if estado:
-        sql += " WHERE estado = ?"
-        params.append(estado.upper())
-    filas = db.leer(sql + " ORDER BY notificacion_id DESC", *params, contingencia=False)
-    return jsonify(filas[:200])
+           "proveedor_msg_id, created_at, enviada_at FROM {e}.notificacion" + donde(condiciones))
+    return listar_paginado(sql, params, "ORDER BY notificacion_id DESC", contingencia=False)
 
 
 @bp.post("/procesar")

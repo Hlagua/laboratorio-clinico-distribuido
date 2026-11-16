@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from flask import Blueprint, Response, jsonify, request
 
 from .. import db
+from ..paginacion import donde, listar, rango_fechas
 from ..errores import ApiError
 from ..pdf import pdf_ingresos
 from ..seguridad import ROLES, hash_password, requiere, usuario_actual, validar_password
@@ -15,15 +16,28 @@ bp = Blueprint("usuarios", __name__, url_prefix="/api")
 @bp.get("/usuarios")
 @requiere("ADMIN")
 def listar_usuarios():
-    return jsonify(db.leer("""
+    """Filtros: ?q (nombre, apellido, correo o cédula), ?rol, ?activo=1|0; paginado con ?pagina."""
+    condiciones, params = [], []
+    if request.args.get("q"):
+        condiciones.append("(UPPER(p.nombres) LIKE ? OR UPPER(p.apellidos) LIKE ? OR UPPER(u.email) LIKE ? OR p.cedula LIKE ?)")
+        patron = f"%{request.args['q'].strip().upper()}%"
+        params += [patron, patron, patron, patron]
+    if request.args.get("rol"):
+        condiciones.append("EXISTS (SELECT 1 FROM {e}.usuario_rol x JOIN {e}.rol y ON y.rol_id = x.rol_id "
+                           "WHERE x.usuario_id = u.usuario_id AND y.codigo = ?)")
+        params.append(request.args["rol"].upper())
+    if request.args.get("activo") in ("0", "1"):
+        condiciones.append("u.activo = ?")
+        params.append(request.args["activo"] == "1")
+    return listar("""
         SELECT u.usuario_id, u.email, u.activo, u.ultimo_login, p.cedula, CONCAT(p.nombres, ' ', p.apellidos) AS nombre,
                STRING_AGG(r.codigo, ',') AS roles
         FROM {e}.usuario u
         JOIN {e}.persona p ON p.persona_id = u.persona_id
         LEFT JOIN {e}.usuario_rol ur ON ur.usuario_id = u.usuario_id
-        LEFT JOIN {e}.rol r ON r.rol_id = ur.rol_id
-        GROUP BY u.usuario_id, u.email, u.activo, u.ultimo_login, p.cedula, p.nombres, p.apellidos
-        ORDER BY u.usuario_id"""))
+        LEFT JOIN {e}.rol r ON r.rol_id = ur.rol_id""" + donde(condiciones) + """
+        GROUP BY u.usuario_id, u.email, u.activo, u.ultimo_login, p.cedula, p.nombres, p.apellidos""",
+        params, "ORDER BY u.usuario_id", maximo=1000)
 
 
 @bp.post("/usuarios")
@@ -85,9 +99,10 @@ def buscar_pacientes():
     if request.args.get("cedula"):
         return jsonify(db.leer(sql + " WHERE p.cedula = ?", request.args["cedula"]))
     if request.args.get("q"):
-        return jsonify(db.leer(sql + " WHERE UPPER(p.apellidos) LIKE ? ORDER BY p.apellidos",
-                               f"%{request.args['q'].upper()}%")[:50])
-    return jsonify(db.leer(sql + " ORDER BY p.apellidos")[:100])
+        patron = f"%{request.args['q'].strip().upper()}%"
+        return listar(sql + " WHERE UPPER(p.apellidos) LIKE ? OR UPPER(p.nombres) LIKE ?", [patron, patron],
+                      "ORDER BY p.apellidos, p.nombres", maximo=50)
+    return listar(sql, [], "ORDER BY p.apellidos, p.nombres", maximo=100)
 
 
 # ------------------------------ reportes ------------------------------
@@ -127,10 +142,30 @@ def reporte_examenes():
 @bp.get("/auditoria")
 @requiere("ADMIN")
 def auditoria():
-    """Solo en Azure SQL (en contingencia la auditoría se consulta en MongoDB)."""
+    """Solo en Azure SQL (en contingencia la auditoría se consulta en MongoDB).
+    Filtros: ?desde, ?hasta (AAAA-MM-DD), ?accion, ?usuario (parte del correo); paginado con ?pagina."""
+    condiciones, params = [], []
+    rango_fechas("a.created_at", condiciones, params)
+    if request.args.get("accion"):
+        condiciones.append("a.accion = ?")
+        params.append(request.args["accion"].upper())
+    if request.args.get("usuario"):
+        if request.args["usuario"].strip().lower() == "sistema":
+            condiciones.append("a.usuario_id IS NULL")
+        else:
+            condiciones.append("LOWER(u.email) LIKE ?")
+            params.append(f"%{request.args['usuario'].strip().lower()}%")
     limite = min(max(request.args.get("limite", 100, type=int), 1), 500)
-    return jsonify(db.leer("""
-        SELECT TOP (?) a.auditoria_id, a.created_at, u.email, a.rol_actuante, a.accion, a.entidad, a.entidad_id,
+    return listar("""
+        SELECT a.auditoria_id, a.created_at, u.email, a.rol_actuante, a.accion, a.entidad, a.entidad_id,
                a.instancia_api, a.ip_origen, a.detalle
-        FROM {e}.auditoria a LEFT JOIN {e}.usuario u ON u.usuario_id = a.usuario_id
-        ORDER BY a.auditoria_id DESC""", limite, contingencia=False))
+        FROM {e}.auditoria a LEFT JOIN {e}.usuario u ON u.usuario_id = a.usuario_id""" + donde(condiciones),
+        params, "ORDER BY a.auditoria_id DESC", maximo=limite, contingencia=False)
+
+
+@bp.get("/auditoria/acciones")
+@requiere("ADMIN")
+def acciones_auditoria():
+    """Acciones registradas, para el filtro de la pantalla de auditoría."""
+    return jsonify([f["accion"] for f in db.leer(
+        "SELECT DISTINCT accion FROM {e}.auditoria ORDER BY accion", contingencia=False)])

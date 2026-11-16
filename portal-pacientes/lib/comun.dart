@@ -29,6 +29,13 @@ String fechaHora(dynamic iso) {
   return '${d.day} ${_meses[d.month - 1]} ${d.year}, ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
+/// Solo la hora (Ecuador) de una fecha UTC de la API: "11:55".
+String horaLocal(dynamic iso) {
+  if (iso == null) return '';
+  final d = DateTime.parse('${(iso as String).replaceAll('Z', '')}Z').subtract(const Duration(hours: 5));
+  return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+}
+
 Color colorEstado(String? estado) => switch (estado) {
       'COMPLETADA' || 'APROBADO' || 'CONFIRMADA' || 'RESULTADO_LISTO' || 'ACTIVO' || 'ATENDIDA' => verde,
       'PAGADA' || 'EN_PROCESO' || 'MUESTRA_TOMADA' => const Color(0xFF1F5FA8),

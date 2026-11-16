@@ -4,20 +4,32 @@ import { Api, mensajeError } from '../core/api';
 import { AuthService, NOMBRE_ROL, Rol } from '../core/auth';
 import { fechaHora } from '../core/formato';
 import { UsuarioAdmin } from '../core/modelos';
+import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
 
 @Component({
   selector: 'app-usuarios',
-  imports: [FormsModule],
+  imports: [FormsModule, Paginador],
   template: `
     <h1>Usuarios y roles</h1>
     <p class="sub">Una persona puede tener varios roles (por ejemplo, un médico que también es paciente).</p>
     @if (error()) { <div class="alerta error">{{ error() }}</div> }
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
+    <form class="card fila" (ngSubmit)="cargar(1)">
+      <div class="campo"><label for="q">Buscar</label>
+        <input id="q" name="q" [(ngModel)]="f.q" placeholder="nombre, apellido, correo o cédula" /></div>
+      <div class="campo"><label for="r">Rol</label>
+        <select id="r" name="r" [(ngModel)]="f.rol"><option value="">Todos</option>
+          @for (r of roles; track r) { <option [value]="r">{{ nombre(r) }}</option> }</select></div>
+      <div class="campo"><label for="a">Estado</label>
+        <select id="a" name="a" [(ngModel)]="f.activo"><option value="">Todos</option>
+          <option value="1">Activos</option><option value="0">Inactivos</option></select></div>
+      <div class="campo"><button type="submit">Buscar</button></div>
+    </form>
     <div class="card tabla-scroll">
       <table>
         <thead><tr><th>Usuario</th><th>Cédula</th><th>Roles</th><th>Último ingreso</th><th>Estado</th><th>Agregar rol</th></tr></thead>
         <tbody>
-          @for (u of usuarios(); track u.usuario_id) {
+          @for (u of usuarios().items; track u.usuario_id) {
             <tr>
               <td><strong>{{ u.nombre }}</strong><br /><small class="muted">{{ u.email }}</small></td>
               <td>{{ u.cedula }}</td>
@@ -41,9 +53,10 @@ import { UsuarioAdmin } from '../core/modelos';
                 </div>
               </td>
             </tr>
-          }
+          } @empty { <tr><td colspan="6" class="vacio">No hay usuarios con esos filtros.</td></tr> }
         </tbody>
       </table>
+      <app-paginador [pagina]="usuarios()" (cambiar)="cargar($event)" />
     </div>
 
     <form class="card" (ngSubmit)="crear()">
@@ -81,7 +94,8 @@ export class Usuarios implements OnInit {
   protected readonly auth = inject(AuthService);
   protected readonly fechaHora = fechaHora;
   protected readonly roles: Rol[] = ['PACIENTE', 'LABORATORISTA', 'MEDICO', 'ADMIN'];
-  protected readonly usuarios = signal<UsuarioAdmin[]>([]);
+  protected readonly usuarios = signal<Pagina<UsuarioAdmin>>(paginaVacia());
+  protected f = { q: '', rol: '', activo: '' };
   protected readonly error = signal('');
   protected readonly aviso = signal('');
   protected rolNuevo: Record<number, string> = {};
@@ -90,7 +104,7 @@ export class Usuarios implements OnInit {
   protected n = this.vacio();
 
   ngOnInit() {
-    this.cargar();
+    this.cargar(1);
   }
 
   protected nombre(r: string) {
@@ -102,9 +116,9 @@ export class Usuarios implements OnInit {
       rol: 'LABORATORISTA', registro_profesional: '', especialidad_o_area: '' };
   }
 
-  async cargar() {
+  async cargar(pagina = this.usuarios().pagina) {
     try {
-      this.usuarios.set(await this.api.get<UsuarioAdmin[]>('/api/usuarios'));
+      this.usuarios.set(await this.api.get<Pagina<UsuarioAdmin>>('/api/usuarios', { ...this.f, pagina, por_pagina: POR_PAGINA }));
     } catch (e) {
       this.error.set(mensajeError(e));
     }

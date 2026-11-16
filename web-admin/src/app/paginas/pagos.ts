@@ -3,27 +3,35 @@ import { FormsModule } from '@angular/forms';
 import { Api, mensajeError } from '../core/api';
 import { claseEstado, dinero, fechaHora, textoEstado } from '../core/formato';
 import { Pago } from '../core/modelos';
+import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
 
 @Component({
   selector: 'app-pagos',
-  imports: [FormsModule],
+  imports: [FormsModule, Paginador],
   template: `
     <h1>Pagos y reembolsos</h1>
     <p class="sub">Pagos con Stripe (modo prueba) y transferencias con QR. Los pagos de Stripe se confirman solos por webhook.</p>
     @if (error()) { <div class="alerta error">{{ error() }}</div> }
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
-    <div class="card fila">
+    <form class="card fila" (ngSubmit)="cargar(1)">
       <div class="campo"><label for="e">Estado</label>
-        <select id="e" [(ngModel)]="estado" (change)="cargar()">
+        <select id="e" name="e" [(ngModel)]="estado">
           <option value="">Todos</option>
           @for (e of estados; track e) { <option [value]="e">{{ textoEstado(e) }}</option> }
         </select></div>
-    </div>
+      <div class="campo"><label for="m">Método</label>
+        <select id="m" name="m" [(ngModel)]="f.metodo"><option value="">Todos</option>
+          <option value="STRIPE">Stripe</option><option value="TRANSFERENCIA_QR">Transferencia</option></select></div>
+      <div class="campo"><label for="q">Paciente o solicitud</label><input id="q" name="q" [(ngModel)]="f.q" /></div>
+      <div class="campo"><label for="d">Desde</label><input id="d" type="date" name="d" [(ngModel)]="f.desde" /></div>
+      <div class="campo"><label for="h">Hasta</label><input id="h" type="date" name="h" [(ngModel)]="f.hasta" /></div>
+      <div class="campo"><button type="submit">Filtrar</button></div>
+    </form>
     <div class="card tabla-scroll">
       <table>
         <thead><tr><th>#</th><th>Solicitud</th><th>Paciente</th><th>Método</th><th class="num">Monto</th><th class="num">Reembolsado</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
         <tbody>
-          @for (p of pagos(); track p.pago_id) {
+          @for (p of pagos().items; track p.pago_id) {
             <tr>
               <td>{{ p.pago_id }}</td><td>{{ p.solicitud_codigo }}</td><td>{{ p.paciente }}</td>
               <td>{{ p.metodo === 'STRIPE' ? 'Stripe' : 'Transferencia ' + (p.referencia_transferencia ?? '') }}</td>
@@ -44,6 +52,7 @@ import { Pago } from '../core/modelos';
           } @empty { <tr><td colspan="9" class="vacio">Sin pagos.</td></tr> }
         </tbody>
       </table>
+      <app-paginador [pagina]="pagos()" (cambiar)="cargar($event)" />
     </div>
 
     @if (seleccionado(); as p) {
@@ -75,18 +84,19 @@ export class Pagos implements OnInit {
   protected estado = '';
   protected monto: number | null = null;
   protected motivo = '';
-  protected readonly pagos = signal<Pago[]>([]);
+  protected readonly pagos = signal<Pagina<Pago>>(paginaVacia());
+  protected f = { metodo: '', q: '', desde: '', hasta: '' };
   protected readonly seleccionado = signal<Pago | null>(null);
   protected readonly error = signal('');
   protected readonly aviso = signal('');
 
   ngOnInit() {
-    this.cargar();
+    this.cargar(1);
   }
 
-  async cargar() {
+  async cargar(pagina = this.pagos().pagina) {
     try {
-      this.pagos.set(await this.api.get<Pago[]>('/api/pagos', { estado: this.estado }));
+      this.pagos.set(await this.api.get<Pagina<Pago>>('/api/pagos', { estado: this.estado, ...this.f, pagina, por_pagina: POR_PAGINA }));
     } catch (e) {
       this.error.set(mensajeError(e));
     }

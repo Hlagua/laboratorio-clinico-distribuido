@@ -16,7 +16,7 @@ Proyecto final integrador de **Aplicaciones Distribuidas** (UTA). Integra las un
 | Si quiere ver… | Abra |
 |---|---|
 | El informe completo (investigación, diseño, resultados y conclusiones) | [docs/00-informe-tecnico.md](docs/00-informe-tecnico.md) |
-| **Qué se decidió y por qué** (decisiones D1–D35, cronología, hallazgos) | [docs/BITACORA.md](docs/BITACORA.md) |
+| **Qué se decidió y por qué** (decisiones D1–D38, cronología, hallazgos) | [docs/BITACORA.md](docs/BITACORA.md) |
 | Fase I: análisis de requerimientos, actores y casos de uso | [docs/01-analisis-requerimientos.md](docs/01-analisis-requerimientos.md) |
 | Fases II y III: arquitectura, modelo ER, normalización y replicación | [docs/02-arquitectura-y-datos.md](docs/02-arquitectura-y-datos.md) |
 | Diccionario de datos (generado desde la base) | [docs/03-diccionario-datos.md](docs/03-diccionario-datos.md) |

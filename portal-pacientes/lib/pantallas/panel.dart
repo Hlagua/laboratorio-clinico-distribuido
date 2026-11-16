@@ -79,22 +79,71 @@ class _PanelState extends State<Panel> {
     );
   }
 
-  Widget _itemCita(Map<String, dynamic> c) => Card(
-        child: ListTile(
-          leading: const Icon(Icons.event, color: verde),
-          title: Text('${fechaLarga(c['fecha'] as String)} · ${hora(c['hora_inicio'])}'),
-          subtitle: Text(c['motivo'] as String? ?? 'Sin motivo'),
-          trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-            Etiqueta(c['estado'] as String?),
-            if (c['estado'] == 'PENDIENTE_PAGO' || c['estado'] == 'CONFIRMADA')
-              IconButton(
-                tooltip: 'Cancelar cita',
-                icon: const Icon(Icons.close),
-                onPressed: () => _cancelar(c),
+  /// Una cita es el turno para la toma de muestras. Queda "pendiente de pago" hasta que
+  /// se pagan los exámenes vinculados a ella; si no se pagan a tiempo, se cancela sola.
+  Widget _itemCita(Map<String, dynamic> c) {
+    final estado = c['estado'] as String?;
+    final pendiente = estado == 'PENDIENTE_PAGO';
+    final solicitudId = c['solicitud_id'] as int?;
+    final textos = <String>[
+      c['motivo'] as String? ?? 'Sin motivo',
+      if (solicitudId != null) 'Exámenes ${c['solicitud_codigo']}: ${c['examenes_resumen'] ?? ''} · ${dinero(c['solicitud_total'])}',
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ListTile(
+            leading: const Icon(Icons.event, color: verde),
+            title: Text('${fechaLarga(c['fecha'] as String)} · ${hora(c['hora_inicio'])}'),
+            subtitle: Text(textos.join('\n')),
+            trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+              Etiqueta(estado),
+              if (pendiente || estado == 'CONFIRMADA')
+                IconButton(tooltip: 'Cancelar cita', icon: const Icon(Icons.close), onPressed: () => _cancelar(c)),
+            ]),
+          ),
+          if (pendiente)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Text(
+                  solicitudId == null
+                      ? 'Para confirmarla elija sus exámenes y páguelos antes de las ${horaLocal(c['vence_at'])}.'
+                      : 'Pague los exámenes antes de las ${horaLocal(c['vence_at'])} para confirmar la cita.',
+                  style: const TextStyle(color: ambar, fontSize: 13),
+                ),
+                FilledButton.icon(
+                  icon: Icon(solicitudId == null ? Icons.biotech : Icons.payment),
+                  label: Text(solicitudId == null ? 'Elegir exámenes y pagar' : 'Pagar ${c['solicitud_codigo']}'),
+                  onPressed: () async {
+                    await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => solicitudId == null
+                                ? NuevaSolicitud(citaId: c['cita_id'] as int)
+                                : DetalleSolicitud(id: solicitudId)));
+                    _recargar();
+                  },
+                ),
+              ]),
+            )
+          else if (solicitudId != null && estado == 'CONFIRMADA')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.science_outlined),
+                label: Text('Ver exámenes ${c['solicitud_codigo']}'),
+                onPressed: () async {
+                  await Navigator.push(context, MaterialPageRoute(builder: (_) => DetalleSolicitud(id: solicitudId)));
+                  _recargar();
+                },
               ),
-          ]),
-        ),
-      );
+            ),
+        ]),
+      ),
+    );
+  }
 
   Future<void> _cancelar(Map<String, dynamic> c) async {
     final ok = await showDialog<bool>(

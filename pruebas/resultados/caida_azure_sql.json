@@ -1,19 +1,19 @@
 {
-  "duracion_s": 60,
+  "duracion_s": 20,
   "antes": {
     "mis_solicitudes": [
       200,
       "azure",
-      "api1"
+      "api2"
     ],
     "catalogo": [
       200,
       "azure",
-      "api3"
+      "api1"
     ],
     "escritura_cita": [
       409,
-      "DUPLICADO"
+      "NEGOCIO_50011"
     ]
   },
   "durante": [
@@ -21,28 +21,12 @@
       "mis_solicitudes": [
         200,
         "supabase",
-        "api2"
+        "api1"
       ],
       "catalogo": [
         200,
         "supabase",
-        "api4"
-      ],
-      "escritura_cita": [
-        503,
-        "MODO_CONTINGENCIA"
-      ]
-    },
-    {
-      "mis_solicitudes": [
-        200,
-        "supabase",
         "api2"
-      ],
-      "catalogo": [
-        200,
-        "supabase",
-        "api4"
       ],
       "escritura_cita": [
         503,
@@ -58,7 +42,23 @@
       "catalogo": [
         200,
         "supabase",
-        "api1"
+        "api4"
+      ],
+      "escritura_cita": [
+        503,
+        "MODO_CONTINGENCIA"
+      ]
+    },
+    {
+      "mis_solicitudes": [
+        200,
+        "supabase",
+        "api2"
+      ],
+      "catalogo": [
+        200,
+        "supabase",
+        "api4"
       ],
       "escritura_cita": [
         503,
@@ -79,61 +79,61 @@
     ],
     "escritura_cita": [
       409,
-      "DUPLICADO"
+      "NEGOCIO_50011"
     ]
   },
   "eventos": [
     {
-      "hora": "16:50:13",
+      "hora": "23:33:22",
       "evento": "login normal",
       "estado": 200,
-      "instancia": "api3"
+      "instancia": "api4"
     },
     {
-      "hora": "16:50:18",
+      "hora": "23:33:29",
       "evento": "ANTES de la caída",
       "mis_solicitudes": [
         200,
         "azure",
-        "api1"
+        "api2"
       ],
       "catalogo": [
         200,
         "azure",
-        "api3"
+        "api1"
       ],
       "escritura_cita": [
         409,
-        "DUPLICADO"
+        "NEGOCIO_50011"
       ]
     },
     {
-      "hora": "16:50:28",
+      "hora": "23:33:39",
       "evento": "regla temporal: salida hacia Azure SQL BLOQUEADA en ambas VM"
     },
     {
-      "hora": "16:50:33",
+      "hora": "23:33:45",
       "evento": "sesiones de app_api/app_sync cerradas",
       "cantidad": 6
     },
     {
-      "hora": "16:50:41",
+      "hora": "23:34:09",
       "evento": "login DURANTE la caída",
       "estado": 200,
-      "instancia": "api3"
+      "instancia": "api2"
     },
     {
-      "hora": "16:51:18",
+      "hora": "23:34:30",
       "evento": "DURANTE la caída (1)",
       "mis_solicitudes": [
         200,
         "supabase",
-        "api2"
+        "api1"
       ],
       "catalogo": [
         200,
         "supabase",
-        "api4"
+        "api2"
       ],
       "escritura_cita": [
         503,
@@ -141,26 +141,8 @@
       ]
     },
     {
-      "hora": "16:51:30",
+      "hora": "23:34:34",
       "evento": "DURANTE la caída (2)",
-      "mis_solicitudes": [
-        200,
-        "supabase",
-        "api2"
-      ],
-      "catalogo": [
-        200,
-        "supabase",
-        "api4"
-      ],
-      "escritura_cita": [
-        503,
-        "MODO_CONTINGENCIA"
-      ]
-    },
-    {
-      "hora": "16:51:51",
-      "evento": "DURANTE la caída (3)",
       "mis_solicitudes": [
         200,
         "supabase",
@@ -169,7 +151,7 @@
       "catalogo": [
         200,
         "supabase",
-        "api1"
+        "api4"
       ],
       "escritura_cita": [
         503,
@@ -177,11 +159,29 @@
       ]
     },
     {
-      "hora": "16:52:02",
+      "hora": "23:34:55",
+      "evento": "DURANTE la caída (3)",
+      "mis_solicitudes": [
+        200,
+        "supabase",
+        "api2"
+      ],
+      "catalogo": [
+        200,
+        "supabase",
+        "api4"
+      ],
+      "escritura_cita": [
+        503,
+        "MODO_CONTINGENCIA"
+      ]
+    },
+    {
+      "hora": "23:35:05",
       "evento": "regla temporal eliminada: Azure SQL vuelve a estar accesible"
     },
     {
-      "hora": "16:52:22",
+      "hora": "23:35:22",
       "evento": "DESPUÉS (recuperado en ~8 s)",
       "mis_solicitudes": [
         200,
@@ -195,7 +195,7 @@
       ],
       "escritura_cita": [
         409,
-        "DUPLICADO"
+        "NEGOCIO_50011"
       ]
     }
   ]

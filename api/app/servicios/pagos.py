@@ -18,6 +18,7 @@ from flask import Blueprint, jsonify, request
 
 from .. import config, db
 from ..errores import ApiError, no_encontrado, prohibido
+from ..paginacion import donde, listar as listar_paginado, rango_fechas
 from ..seguridad import perfil, requiere, rol_actual, usuario_actual
 from ..validacion import cuerpo, decimal, entero, texto
 from .notificaciones import encolar
@@ -179,10 +180,21 @@ def mis_pagos():
 @bp.get("")
 @requiere("ADMIN")
 def listar():
-    estado = request.args.get("estado")
-    if estado:
-        return jsonify(db.leer(SQL_PAGOS + " WHERE pg.estado = ? ORDER BY pg.pago_id DESC", estado.upper()))
-    return jsonify(db.leer(SQL_PAGOS + " ORDER BY pg.pago_id DESC")[:200])
+    """Filtros: ?estado, ?metodo, ?q (paciente o código de solicitud), ?desde, ?hasta; paginado con ?pagina."""
+    condiciones, params = [], []
+    if request.args.get("estado"):
+        condiciones.append("pg.estado = ?")
+        params.append(request.args["estado"].upper())
+    if request.args.get("metodo"):
+        condiciones.append("pg.metodo = ?")
+        params.append(request.args["metodo"].upper())
+    if request.args.get("q"):
+        condiciones.append("(UPPER(p.apellidos) LIKE ? OR UPPER(p.nombres) LIKE ? OR s.codigo LIKE ?)")
+        patron = f"%{request.args['q'].strip().upper()}%"
+        params += [patron, patron, patron]
+    rango_fechas("pg.created_at", condiciones, params)
+    return listar_paginado(SQL_PAGOS + donde(condiciones), params, "ORDER BY pg.pago_id DESC",
+                           maximo=1000 if request.args.get("estado") else 200)
 
 
 @bp.get("/<int:pago_id>")

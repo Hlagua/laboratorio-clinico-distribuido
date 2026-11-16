@@ -7,7 +7,7 @@ interface Enlace { ruta: string; texto: string; roles: Rol[] }
 
 const MENU: Enlace[] = [
   { ruta: '/inicio', texto: 'Inicio', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
-  { ruta: '/agenda', texto: 'Agenda del día', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
+  { ruta: '/agenda', texto: 'Agenda del día', roles: ['LABORATORISTA', 'ADMIN'] },
   { ruta: '/solicitudes', texto: 'Solicitudes y resultados', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
   { ruta: '/nueva-solicitud', texto: 'Nueva solicitud', roles: ['LABORATORISTA', 'MEDICO'] },
   { ruta: '/pacientes', texto: 'Pacientes y tratamientos', roles: ['MEDICO', 'ADMIN', 'LABORATORISTA'] },

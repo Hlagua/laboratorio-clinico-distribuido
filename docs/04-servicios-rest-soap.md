@@ -40,6 +40,12 @@ Cada una de las 4 instancias Flask (`api1`…`api4`) contiene los mismos servici
 
 La columna **C** marca los endpoints que funcionan en contingencia (lectura desde Supabase).
 
+**Listados paginados** (`api/app/paginacion.py`): `/api/usuarios`, `/api/pacientes`, `/api/solicitudes`, `/api/pagos`, `/api/notificaciones` y `/api/auditoria`.
+- Con `?pagina=N&por_pagina=M` (máximo 100) responden `{items, total, pagina, por_pagina, paginas}`.
+- Sin `?pagina`, devuelven la lista como antes, para no romper al portal, al cliente SOAP ni a las pruebas.
+- Se pagina en la base con `OFFSET … FETCH`, que es SQL estándar y funciona igual en Azure SQL y en Supabase durante la contingencia.
+- Los filtros de fecha `?desde=` y `?hasta=` usan formato AAAA-MM-DD e incluyen ambos días.
+
 ### Autenticación
 | Método | Ruta | Rol | C | Descripción |
 |---|---|---|---|---|
@@ -52,10 +58,16 @@ La columna **C** marca los endpoints que funcionan en contingencia (lectura desd
 |---|---|---|---|---|
 | GET | `/api/citas/franjas?desde=AAAA-MM-DD&dias=7` | público | ✔ | Franjas con cupo |
 | POST | `/api/citas` | PACIENTE | | `{franja_id, motivo}` → cita `PENDIENTE_PAGO` (expira a los 30 min sin pago) |
-| GET | `/api/citas/mias` | PACIENTE | ✔ | Mis citas |
+| GET | `/api/citas/mias` | PACIENTE | ✔ | Mis citas, con la solicitud vinculada (`solicitud_id`, `solicitud_codigo`, `examenes_resumen`) y `vence_at` si está pendiente |
 | DELETE | `/api/citas/{id}` | PACIENTE (propia), ADMIN | | Cancela y libera el cupo |
-| GET | `/api/citas/agenda?fecha=` | LABORATORISTA, MEDICO, ADMIN | ✔ | Agenda del día |
+| GET | `/api/citas/agenda?fecha=` | LABORATORISTA, ADMIN | ✔ | Turnos de toma de muestras del día, con la solicitud y los exámenes de cada cita |
 | POST | `/api/citas/franjas` | ADMIN | | `{desde, hasta, hora_inicio, hora_fin, intervalo_minutos, capacidad}` genera franjas (lunes a sábado) |
+
+**Flujo de la cita:**
+1. La cita es el **turno para la toma de muestras** en el laboratorio; no es una consulta médica, por eso el médico no ve la agenda.
+2. Al reservarla queda `PENDIENTE_PAGO`. El paciente elige sus exámenes, que se vinculan a la cita, y los paga.
+3. Con el pago confirmado, la cita pasa a `CONFIRMADA`. Si no se paga en 30 minutos, el sincronizador la cancela y libera el cupo.
+4. No existe un pago separado de la cita: se paga a través de su solicitud.
 
 Para la **prueba de concurrencia (Fase VI)**, con `PERMITIR_PRUEBA_CONCURRENCIA=true` se habilita `POST /api/citas?proteccion=0&espera_ms=800`, que ejecuta la reserva **sin** bloqueos y permite comparar ambos casos.
 
@@ -66,7 +78,7 @@ Para la **prueba de concurrencia (Fase VI)**, con `PERMITIR_PRUEBA_CONCURRENCIA=
 | POST | `/api/examenes/catalogo` | ADMIN | | Nuevo examen con sus parámetros |
 | POST | `/api/solicitudes` | PACIENTE, MEDICO, LABORATORISTA | | `{examenes: [ids], paciente_id?, cita_id?}` |
 | GET | `/api/solicitudes/mias` | PACIENTE | ✔ | Mis solicitudes |
-| GET | `/api/solicitudes?estado=&cedula=&codigo=&propias=1` | LABORATORISTA, MEDICO, ADMIN | ✔ | Búsqueda |
+| GET | `/api/solicitudes?estado=&cedula=&codigo=&paciente=&desde=&hasta=&propias=1&pagina=` | LABORATORISTA, MEDICO, ADMIN | ✔ | Búsqueda paginada, con `examenes_resumen` |
 | GET | `/api/solicitudes/{id}` | dueño o personal | ✔ | Solicitud completa: exámenes, valores y observaciones |
 | GET | `/api/solicitudes/{id}/pdf` | dueño o personal | ✔ | **Informe PDF**, con los valores fuera de rango en rojo |
 | POST | `/api/solicitudes/detalle/{id}/muestra` | LABORATORISTA | | Registra la toma de muestra |
@@ -82,7 +94,7 @@ Para la **prueba de concurrencia (Fase VI)**, con `PERMITIR_PRUEBA_CONCURRENCIA=
 | POST | `/api/pagos/{id}/reembolso` | ADMIN | | `{monto, motivo}`: reembolso total o parcial en Stripe (con Idempotency-Key) |
 | GET | `/api/pagos/mios` | PACIENTE | ✔ | Mis pagos |
 | GET | `/api/pagos/{id}` | dueño o ADMIN | ✔ | Pago con sus reembolsos |
-| GET | `/api/pagos?estado=` | ADMIN | ✔ | Listado |
+| GET | `/api/pagos?estado=&metodo=&q=&desde=&hasta=&pagina=` | ADMIN | ✔ | Listado filtrado y paginado |
 
 **Eventos de Stripe que se procesan:**
 
@@ -107,7 +119,7 @@ Para la **prueba de concurrencia (Fase VI)**, con `PERMITIR_PRUEBA_CONCURRENCIA=
 ### Notificaciones (Mailjet)
 | Método | Ruta | Rol | Descripción |
 |---|---|---|---|
-| GET | `/api/notificaciones?estado=` | ADMIN | Bandeja de salida con el estado y el `MessageID` de Mailjet |
+| GET | `/api/notificaciones?estado=&q=&desde=&hasta=&pagina=` | ADMIN | Bandeja de salida con el estado y el `MessageID` de Mailjet (filtrada y paginada) |
 | POST | `/api/notificaciones/procesar` | ADMIN | Fuerza el envío de los pendientes |
 | POST | `/api/notificaciones/prueba` | ADMIN | `{email}` envía un correo de prueba de inmediato |
 
@@ -116,14 +128,15 @@ Las operaciones solo **encolan** el correo en la tabla `notificacion`, así que 
 ### Administración y reportes
 | Método | Ruta | Rol | C | Descripción |
 |---|---|---|---|---|
-| GET | `/api/usuarios` | ADMIN | ✔ | Usuarios con sus roles |
+| GET | `/api/usuarios?q=&rol=&activo=&pagina=` | ADMIN | ✔ | Usuarios con sus roles (búsqueda por nombre, correo o cédula) |
 | POST | `/api/usuarios` | ADMIN | | Crea un usuario con un rol (si la cédula existe, reutiliza la persona) |
 | POST | `/api/usuarios/{id}/roles` | ADMIN | | Agrega un rol y crea el perfil (multirrol) |
 | PATCH | `/api/usuarios/{id}` | ADMIN | | `{activo}` |
-| GET | `/api/pacientes?cedula=` o `?q=apellido` | LABORATORISTA, MEDICO, ADMIN | ✔ | Búsqueda de pacientes |
+| GET | `/api/pacientes?cedula=` o `?q=nombre o apellido&pagina=` | LABORATORISTA, MEDICO, ADMIN | ✔ | Búsqueda de pacientes |
 | GET | `/api/reportes/ingresos?desde=&hasta=&formato=pdf` | ADMIN | ✔ | Ingresos en JSON o **PDF** |
 | GET | `/api/reportes/examenes` | ADMIN, MEDICO | ✔ | Exámenes más solicitados |
-| GET | `/api/auditoria?limite=100` | ADMIN | | Auditoría (en contingencia se consulta en MongoDB) |
+| GET | `/api/auditoria?desde=&hasta=&accion=&usuario=&pagina=` | ADMIN | | Auditoría filtrada y paginada (en contingencia se consulta en MongoDB) |
+| GET | `/api/auditoria/acciones` | ADMIN | | Acciones registradas, para el filtro |
 
 ### Operación
 | Método | Ruta | Descripción |

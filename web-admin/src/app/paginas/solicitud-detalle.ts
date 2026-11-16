@@ -14,7 +14,7 @@ interface Captura { parametro: Parametro; valor: string }
   selector: 'app-solicitud-detalle',
   imports: [FormsModule, RouterLink, Sugerencias],
   template: `
-    <a routerLink="/solicitudes">← Volver a solicitudes</a>
+    <button type="button" class="secundario chico" routerLink="/solicitudes">← Volver a solicitudes</button>
     @if (error()) { <div class="alerta error">{{ error() }}</div> }
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
     @if (s(); as s) {
@@ -134,15 +134,20 @@ export class SolicitudDetalle implements OnInit {
 
   async ngOnInit() {
     try {
-      this.catalogo = await this.api.get<TipoExamen[]>('/api/examenes/catalogo');
-      await this.cargar();
+      // Catálogo y solicitud se piden en paralelo.
+      const [catalogo, solicitud] = await Promise.all([
+        this.api.get<TipoExamen[]>('/api/examenes/catalogo'),
+        this.api.get<Solicitud>(`/api/solicitudes/${this.id()}`),
+      ]);
+      this.catalogo = catalogo;
+      await this.cargar(solicitud);
     } catch (e) {
       this.error.set(mensajeError(e));
     }
   }
 
-  private async cargar() {
-    const s = await this.api.get<Solicitud>(`/api/solicitudes/${this.id()}`);
+  private async cargar(previa?: Solicitud) {
+    const s = previa ?? (await this.api.get<Solicitud>(`/api/solicitudes/${this.id()}`));
     for (const ex of s.examenes) {
       if (!ex.resultado_id && !this.capturas[ex.detalle_id]) {
         const tipo = this.catalogo.find((t) => t.tipo_examen_id === ex.tipo_examen_id);

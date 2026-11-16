@@ -85,6 +85,9 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D33 | El sistema **sugiere** y el médico decide; la precisión se mide con sus respuestas | Responsabilidad clínica del médico. Aceptar enlaza el tratamiento y descartar exige un motivo; aceptadas / respondidas da la precisión de cada regla, para afinarla o desactivarla. | Diagnóstico automático |
 | D34 | Reglas, diagnósticos y sugerencias en **Azure SQL** (replicados a Supabase); guías clínicas en **MongoDB** | Las reglas son relacionales y transaccionales (FK al parámetro del examen y a la solicitud), y en contingencia se siguen leyendo. Las guías son documentos de estructura libre. | Todo en Mongo; todo en SQL |
 | D35 | Al agregar tablas a la réplica, **forzar una carga completa** (borrar `sync_estado`) | El sincronizador guarda una sola versión por destino. Si ya pasó la versión en que se cargaron las tablas nuevas, no las ve como cambios. La carga completa es idempotente (upserts) y tardó unos 35 s. | Versión por tabla (cambio mayor en el sincronizador) |
+| D36 | La **agenda** es de turnos de toma de muestras: solo la ven el laboratorio y la administración | La cita reserva un cupo en el laboratorio; no es una consulta médica. Al médico le aparecía igual que al laboratorista y confundía. El médico trabaja con solicitudes, resultados y tratamientos. | Agenda por médico (exigiría citas médicas, que el sistema no tiene) |
+| D37 | La cita se paga **a través de su solicitud** de exámenes, no con un pago aparte | El precio depende de los exámenes elegidos. El portal ofrece "Elegir exámenes y pagar" en cada cita pendiente; al pedir exámenes se puede vincular una cita pendiente; al pagar, la cita queda confirmada. | Cobrar la cita por separado |
+| D38 | **Paginación en el servidor**, opcional (`?pagina`) y con `OFFSET … FETCH` estándar | Las listas (auditoría, usuarios, pagos, solicitudes, correos, pacientes) crecen sin límite. Paginar en la base evita traer miles de filas. Sin `?pagina` la respuesta es la de antes (compatibilidad), y la misma SQL sirve en Azure SQL y en Supabase. | Paginar en el navegador (trae todo igual) |
 
 ## 5. Registro cronológico
 
@@ -288,6 +291,55 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
   - réplica en Supabase: **27/27 tablas iguales** (versión 431). `verificar_replicacion.py` ya incluye las 5 tablas nuevas.
 - Capturas 09–11 en `docs/capturas/`.
 
+### 2026-11-10 — Pruebas en vivo con navegador y de tolerancia a fallos (otro agente)
+- Henry ejecutó con otro agente:
+  - recorrido del portal (catálogo de 8 exámenes) y de `/admin/` como laboratorista y como administrador (reportes, auditoría, bandeja de correos);
+  - caída de `api1`: **16/16** peticiones atendidas (api2: 7, api3: 4, api4: 5);
+  - caída de Azure SQL. Se agregó una regla temporal `Prueba-caida-azure-sql` en los dos NSG, bloqueando la salida hacia SQL (23:33:34), y se cerraron 6 sesiones. Durante la caída: login 200, lecturas con `X-Origen-Datos: supabase` y escrituras con 503 `MODO_CONTINGENCIA`. La regla se borró a las 23:35:04.
+- **Revisado por Claude:**
+  - El registro de actividad de Azure confirma que la regla temporal se creó y se borró.
+  - Los NSG quedaron como antes y ambas VM, desasignadas.
+  - La recuperación de **~8 s** está medida por el script: el tiempo entre borrar la regla y la primera respuesta servida otra vez desde Azure. La marca de las 23:35:22 es más tardía porque incluye el tiempo de las consultas de verificación.
+- Las evidencias quedaron en `pruebas/resultados/caida_azure_sql.json`.
+
+### 2026-11-16 — Revisión general
+- **Azure CLI:** la sesión venció por MFA. Además, la red del equipo no tiene salida IPv6, por lo que `az login` se colgaba. Se inició sesión con código de dispositivo, forzando IPv4 solo en ese proceso; no se cambió nada en Windows.
+- **IP del equipo:** cambió a 186.42.8.19 y se actualizó la regla propia `lab-vm2-nsg/SSH-solo-equipo`.
+- **Estado tras encender las VM:**
+  - 8 contenedores healthy/up (api1–4, 2 Nginx, 2 sincronizadores), todos en modo normal;
+  - Apache y MariaDB de la VM1 siguen activos;
+  - réplica al día: Azure SQL, Supabase y Mongo en la versión 437.
+- Al arrancar, los sincronizadores registraron un `Login timeout` contra Azure SQL. Es la base serverless reanudándose de la pausa automática: se recuperaron solos (`origen_recuperado`).
+
+### 2026-11-16 — Observaciones del equipo (Pedro) aplicadas
+- **Cita "pendiente de pago" sin opción de pagar** (D37).
+  - Causa: si al reservar se tocaba "Más tarde", o los exámenes se pedían desde "Solicitar exámenes", la solicitud quedaba **sin vínculo con la cita**. El portal no ofrecía cómo pagarla después y a los 30 minutos se cancelaba sola. Es lo que pasó con la cita 35 de Pedro, cuya SOL-14 se creó sin `cita_id`.
+  - Corrección:
+    - la API devuelve en cada cita su solicitud vinculada y la hora de vencimiento;
+    - el portal muestra en la cita pendiente "Elegir exámenes y pagar" o "Pagar SOL-…" y la hora límite;
+    - al pedir exámenes se puede elegir una cita pendiente (viene preseleccionada).
+- **El médico veía la agenda** (D36): se quitó del menú, de la ruta, de la API (403) y del inicio del médico. La agenda ahora explica qué es una cita y muestra, por turno, la solicitud y sus exámenes, con el botón "Abrir solicitud".
+- **Tratamiento sin saber de qué exámenes:** el formulario pide primero "Exámenes en los que se basa", con código, exámenes, fecha y estado. Por defecto toma la última solicitud con resultados. Cada tratamiento muestra "Basado en SOL-…" con el botón "Ver resultados". La columna `tratamiento.solicitud_id` ya existía.
+- **Enlaces en vez de botones:**
+  - pasaron a botones: "← Volver a solicitudes", los códigos SOL en la ficha del paciente ("Abrir"), "Ver guía clínica" y el enlace al portal en el login;
+  - las filas clicables tienen además su botón "Abrir" / "Ver historial".
+- **Filtros y paginación** (D38):
+  - auditoría por fechas (por defecto los últimos 7 días), acción, usuario o "sistema";
+  - correos por estado y texto;
+  - usuarios por nombre, correo o cédula, rol y estado;
+  - pagos por estado, método, paciente o solicitud, y fechas;
+  - solicitudes por paciente y fechas, con la columna de exámenes;
+  - pacientes paginados.
+  - Componente común `app-paginador`, 20 filas por página.
+- El detalle de la solicitud ahora pide el catálogo y la solicitud en paralelo; el "Cargando…" dura menos.
+- **Pruebas:**
+  - endpoints nuevos: 16/16 en cada VM;
+  - consultas nuevas ejecutadas también en Supabase (contingencia): OK;
+  - flujo de cita por el dominio público: 6/6. Dejó la SOL-2026-000016 de Sofía sin pagar, como dato de prueba, y canceló la cita.
+  - Angular y Flutter compilan sin observaciones.
+  - No se revisaron las pantallas en un navegador: eso exige ingresar contraseñas en el sitio publicado; queda para el equipo.
+- **Corrección de un dato:** Rosa Guamán es paciente de ventanilla **sin cuenta**; no puede iniciar sesión.
+
 ## 6. Pendientes
 
 **Necesito del equipo:**
@@ -318,6 +370,7 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 - [x] Flujo completo en la nube (script, con pago por transferencia). Queda por hacer desde el portal: registro → cita → exámenes → pago con Stripe (tarjeta 4242…, lo hace una persona en el navegador) → resultados del laboratorista → observación y tratamiento del médico → PDF.
 - [x] Fase X: las 10 pruebas con evidencias (`docs/05`).
 - [ ] Pago completo con Stripe Checkout desde el portal (lo hace un usuario en el navegador).
-- [ ] Agregar la IP 186.42.9.27 en Atlas → Network Access, si se van a correr desde el PC las pruebas que leen MongoDB (`verificar_replicacion.py`, `flujo_completo.py`).
+- [x] IP 186.42.9.27 agregada en Atlas por Henry (2026-11-09); `verificar_replicacion.py` completo: CONSISTENTE (27 tablas y Mongo, versión 431).
+- [x] Firewall de Azure SQL: `render_1` y `render_2` (rangos de Render.com, de antes del proyecto) **borradas** el 2026-11-10 con autorización de Henry. Abrían el servidor a cualquier servicio alojado en Render, y `AppDistribuidas_2026_DB` no recibe conexiones desde el 2026-10-27. Siguen las reglas de IP fijas: VM1, VM2 y las IP del equipo.
 - [ ] Decidir D21: ¿pagar unos 5 USD al mes por la base en Chile Central? (opcional). Si no, eliminar el servidor vacío `lab-sql-chile-henry`.
 - [x] Informe técnico final (`docs/00-informe-tecnico.md`).

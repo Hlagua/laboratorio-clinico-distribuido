@@ -37,16 +37,18 @@ export class Inicio implements OnInit {
 
   async ngOnInit() {
     try {
-      const [agenda, pagadas, enProceso] = await Promise.all([
-        this.api.get<Cita[]>('/api/citas/agenda', { fecha: hoyIso() }),
+      const [pagadas, enProceso] = await Promise.all([
         this.api.get<SolicitudResumen[]>('/api/solicitudes', { estado: 'PAGADA' }),
         this.api.get<SolicitudResumen[]>('/api/solicitudes', { estado: 'EN_PROCESO' }),
       ]);
-      const lista: Indicador[] = [
-        { titulo: 'Citas de hoy', valor: agenda.length, detalle: 'Agenda del día', ruta: '/agenda' },
-        { titulo: 'Solicitudes por procesar', valor: pagadas.length + enProceso.length,
-          detalle: `${pagadas.length} pagadas · ${enProceso.length} en proceso`, ruta: '/solicitudes' },
-      ];
+      const lista: Indicador[] = [];
+      // La agenda son turnos de toma de muestras: la ven el laboratorio y la administración.
+      if (this.auth.tiene('LABORATORISTA', 'ADMIN')) {
+        const agenda = await this.api.get<Cita[]>('/api/citas/agenda', { fecha: hoyIso() });
+        lista.push({ titulo: 'Citas de hoy', valor: agenda.length, detalle: 'Turnos de toma de muestras', ruta: '/agenda' });
+      }
+      lista.push({ titulo: 'Solicitudes por procesar', valor: pagadas.length + enProceso.length,
+        detalle: `${pagadas.length} pagadas · ${enProceso.length} en proceso`, ruta: '/solicitudes' });
       if (this.auth.tiene('MEDICO', 'ADMIN')) {
         const trat = await this.api.get<Tratamiento[]>('/api/tratamientos');
         lista.push({ titulo: this.auth.tiene('MEDICO') ? 'Mis tratamientos activos' : 'Tratamientos activos',

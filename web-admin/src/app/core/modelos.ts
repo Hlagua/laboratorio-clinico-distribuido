@@ -34,6 +34,10 @@ export interface Cita {
   paciente_id: number;
   paciente: string;
   cedula: string;
+  solicitud_id: number | null;
+  solicitud_codigo: string | null;
+  solicitud_estado: string | null;
+  examenes_resumen: string | null;
 }
 
 export interface SolicitudResumen {
@@ -47,6 +51,7 @@ export interface SolicitudResumen {
   paciente: string;
   medico_id: number | null;
   medico: string | null;
+  examenes_resumen?: string | null;
 }
 
 export interface ValorResultado {

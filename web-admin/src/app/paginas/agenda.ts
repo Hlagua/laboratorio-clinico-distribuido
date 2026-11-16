@@ -1,5 +1,6 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
 import { claseEstado, hora, hoyIso, textoEstado } from '../core/formato';
@@ -10,7 +11,9 @@ import { Cita } from '../core/modelos';
   imports: [FormsModule],
   template: `
     <div class="entre">
-      <div><h1>Agenda del día</h1><p class="sub">Citas reservadas por los pacientes.</p></div>
+      <div><h1>Agenda del día</h1>
+        <p class="sub">Turnos de toma de muestras en el laboratorio. Una cita queda <strong>confirmada</strong> cuando el paciente
+          paga los exámenes vinculados a ella; si no paga en 30 minutos, se cancela sola y el cupo se libera.</p></div>
       <div class="fila">
         <div class="campo"><label for="f">Fecha</label>
           <input id="f" type="date" [(ngModel)]="fecha" (change)="cargar()" /></div>
@@ -20,15 +23,20 @@ import { Cita } from '../core/modelos';
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
     <div class="card tabla-scroll">
       <table>
-        <thead><tr><th>Hora</th><th>Paciente</th><th>Cédula</th><th>Motivo</th><th>Canal</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Hora</th><th>Paciente</th><th>Cédula</th><th>Exámenes</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
         <tbody>
           @for (c of citas(); track c.cita_id) {
             <tr>
               <td><strong>{{ hora(c.hora_inicio) }}</strong>–{{ hora(c.hora_fin) }}</td>
-              <td>{{ c.paciente }}</td><td>{{ c.cedula }}</td><td>{{ c.motivo }}</td>
-              <td>{{ c.canal }}</td>
+              <td>{{ c.paciente }}</td><td>{{ c.cedula }}</td>
+              <td>@if (c.solicitud_id) { <strong>{{ c.solicitud_codigo }}</strong><br /><small>{{ c.examenes_resumen }}</small> }
+                @else { <small class="muted">Aún no elige exámenes</small> }</td>
+              <td>{{ c.motivo }}</td>
               <td><span [class]="claseEstado(c.estado)">{{ textoEstado(c.estado) }}</span></td>
-              <td>
+              <td class="acciones">
+                @if (c.solicitud_id) {
+                  <button class="chico" (click)="abrir(c.solicitud_id)">Abrir solicitud</button>
+                }
                 @if (auth.tiene('ADMIN') && (c.estado === 'PENDIENTE_PAGO' || c.estado === 'CONFIRMADA')) {
                   <button class="secundario chico" (click)="cancelar(c)">Cancelar</button>
                 }
@@ -41,9 +49,11 @@ import { Cita } from '../core/modelos';
       </table>
     </div>
   `,
+  styles: `.acciones { white-space: nowrap; } .acciones button { margin: 2px; }`,
 })
 export class Agenda implements OnInit {
   private readonly api = inject(Api);
+  private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
   protected readonly claseEstado = claseEstado;
   protected readonly textoEstado = textoEstado;
@@ -68,6 +78,10 @@ export class Agenda implements OnInit {
     } finally {
       this.cargando.set(false);
     }
+  }
+
+  abrir(solicitudId: number) {
+    this.router.navigate(['/solicitudes', solicitudId]);
   }
 
   async cancelar(c: Cita) {

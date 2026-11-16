@@ -6,6 +6,7 @@ from flask import Blueprint, Response, jsonify, request
 
 from .. import config, db
 from ..errores import ApiError, no_encontrado, prohibido
+from ..paginacion import donde, listar, rango_fechas
 from ..pdf import pdf_resultados
 from ..seguridad import perfil, requiere, rol_actual, usuario_actual
 from ..validacion import cuerpo, entero, lista_enteros, texto
@@ -16,7 +17,9 @@ log = logging.getLogger("api")
 SQL_SOLICITUDES = """
 SELECT s.solicitud_id, s.codigo, s.estado, s.total, s.observaciones, s.created_at, s.cita_id,
        pa.paciente_id, p.cedula, CONCAT(p.nombres, ' ', p.apellidos) AS paciente,
-       s.medico_id, CONCAT(pm.nombres, ' ', pm.apellidos) AS medico
+       s.medico_id, CONCAT(pm.nombres, ' ', pm.apellidos) AS medico,
+       (SELECT STRING_AGG(t.nombre, ', ') FROM {e}.solicitud_detalle sd
+        JOIN {e}.tipo_examen t ON t.tipo_examen_id = sd.tipo_examen_id WHERE sd.solicitud_id = s.solicitud_id) AS examenes_resumen
 FROM {e}.solicitud_examen s
 JOIN {e}.paciente pa ON pa.paciente_id = s.paciente_id
 JOIN {e}.persona p ON p.persona_id = pa.persona_id
@@ -102,8 +105,12 @@ def buscar_solicitudes():
     if rol_actual() == "MEDICO" and request.args.get("propias") == "1":
         condiciones.append("s.medico_id = ?")
         params.append(perfil("medico_id"))
-    sql = SQL_SOLICITUDES + (" WHERE " + " AND ".join(condiciones) if condiciones else "")
-    return jsonify(db.leer(sql + " ORDER BY s.solicitud_id DESC", *params)[:200])
+    if request.args.get("paciente"):
+        condiciones.append("(UPPER(p.apellidos) LIKE ? OR UPPER(p.nombres) LIKE ?)")
+        patron = f"%{request.args['paciente'].strip().upper()}%"
+        params += [patron, patron]
+    rango_fechas("s.created_at", condiciones, params)
+    return listar(SQL_SOLICITUDES + donde(condiciones), params, "ORDER BY s.solicitud_id DESC")
 
 
 def obtener_solicitud(solicitud_id: int, codigo: str | None = None) -> dict:

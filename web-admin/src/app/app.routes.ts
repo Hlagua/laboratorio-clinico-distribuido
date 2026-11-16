@@ -4,7 +4,7 @@ import { autenticado, conRol } from './core/guards';
 export const routes: Routes = [
   { path: 'login', loadComponent: () => import('./paginas/login').then((m) => m.Login) },
   { path: 'inicio', canActivate: [autenticado], loadComponent: () => import('./paginas/inicio').then((m) => m.Inicio) },
-  { path: 'agenda', canActivate: [autenticado], loadComponent: () => import('./paginas/agenda').then((m) => m.Agenda) },
+  { path: 'agenda', canActivate: [conRol('LABORATORISTA', 'ADMIN')], loadComponent: () => import('./paginas/agenda').then((m) => m.Agenda) },
   { path: 'solicitudes', canActivate: [autenticado], loadComponent: () => import('./paginas/solicitudes').then((m) => m.Solicitudes) },
   {
     path: 'solicitudes/:id', canActivate: [autenticado],

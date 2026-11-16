@@ -207,6 +207,30 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
   late Future<List<dynamic>> _catalogo = _cargar();
   final _elegidos = <int>{};
   bool _enviando = false;
+  late int? _citaId = widget.citaId;
+  // Citas pendientes de pago que aún no tienen exámenes: se pueden vincular aquí.
+  List<Map<String, dynamic>> _citasLibres = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.citaId == null) _cargarCitas();
+  }
+
+  Future<void> _cargarCitas() async {
+    try {
+      final citas = (await api.get('/api/citas/mias') as List<dynamic>).cast<Map<String, dynamic>>();
+      final libres = citas.where((c) => c['estado'] == 'PENDIENTE_PAGO' && c['solicitud_id'] == null).toList();
+      if (mounted) {
+        setState(() {
+          _citasLibres = libres;
+          if (libres.isNotEmpty) _citaId = libres.first['cita_id'] as int;
+        });
+      }
+    } catch (_) {
+      // Sin citas no pasa nada: la solicitud se crea sin cita.
+    }
+  }
 
   Future<List<dynamic>> _cargar() async => await api.get('/api/examenes/catalogo') as List<dynamic>;
 
@@ -215,7 +239,7 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
     try {
       final s = await api.post('/api/solicitudes', {
         'examenes': _elegidos.toList(),
-        'cita_id': widget.citaId,
+        'cita_id': _citaId,
       }) as Map<String, dynamic>;
       if (mounted) {
         Navigator.pushReplacement(
@@ -242,7 +266,25 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
               if (widget.citaId != null)
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: Text('Los exámenes quedarán asociados a la cita que acaba de reservar.'),
+                  child: Text('Los exámenes quedarán asociados a su cita. Al pagarlos, la cita queda confirmada.'),
+                )
+              else if (_citasLibres.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: DropdownButtonFormField<int?>(
+                    initialValue: _citaId,
+                    decoration: const InputDecoration(
+                        labelText: 'Cita para la toma de muestras',
+                        helperText: 'Al pagar estos exámenes, la cita elegida queda confirmada.'),
+                    items: [
+                      for (final c in _citasLibres)
+                        DropdownMenuItem(
+                            value: c['cita_id'] as int,
+                            child: Text('${fechaLarga(c['fecha'] as String)} · ${hora(c['hora_inicio'])} (pendiente de pago)')),
+                      const DropdownMenuItem(value: null, child: Text('Sin cita (acudiré sin turno)')),
+                    ],
+                    onChanged: (v) => setState(() => _citaId = v),
+                  ),
                 ),
               Expanded(
                 child: ListView(padding: const EdgeInsets.all(12), children: [

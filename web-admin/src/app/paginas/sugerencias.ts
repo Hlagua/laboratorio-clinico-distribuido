@@ -37,7 +37,7 @@ import { GuiaClinica, Sugerencia } from '../core/modelos';
           <div class="por-que">Por qué: {{ s.explicacion }}</div>
           <div>Recomendación: {{ s.recomendacion }}</div>
           <small class="muted">{{ s.fuente }}
-            @if (s.guia_clave) { · <a href="#" (click)="verGuia(s.guia_clave); $event.preventDefault()">Ver guía clínica</a> }
+            @if (s.guia_clave) { <button type="button" class="secundario chico" (click)="verGuia(s.guia_clave)">Ver guía clínica</button> }
           </small>
 
           @if (s.estado !== 'PENDIENTE') {
