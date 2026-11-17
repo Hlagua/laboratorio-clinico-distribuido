@@ -228,3 +228,61 @@ export interface GuiaClinica {
   criterios: { parametro: string; rango: string; interpretacion: string }[];
   secciones: { titulo: string; texto: string }[];
 }
+
+/** Medicamento del vademécum de la base de conocimientos. */
+export interface Medicamento {
+  medicamento_id: number;
+  nombre: string;
+  presentacion: string;
+  via: string;
+  dosis: string;
+  frecuencia: string;
+  duracion_dias: number | null;
+  indicaciones: string;
+  advertencias: string | null;
+  diagnosticos: string | null;
+  /** Solo en las sugerencias: para qué diagnóstico se propone. */
+  para_cie10?: string;
+  para_diagnostico?: string;
+  nota?: string | null;
+}
+
+export interface RecetaItem {
+  receta_item_id?: number;
+  orden?: number;
+  medicamento_id: number | null;
+  nombre: string;
+  presentacion: string | null;
+  via: string | null;
+  dosis: string;
+  frecuencia: string;
+  duracion_dias: number | null;
+  cantidad: string | null;
+  indicaciones: string | null;
+  modificado: boolean;
+}
+
+export interface Receta {
+  receta_id: number;
+  solicitud_id: number;
+  medico_id: number;
+  medico: string;
+  diagnostico: string | null;
+  indicaciones_generales: string | null;
+  created_at: string;
+  updated_at: string;
+  items: RecetaItem[];
+}
+
+export interface SugerenciaReceta {
+  diagnosticos: { diagnostico_id: number; codigo_cie10: string; nombre: string }[];
+  diagnostico: string;
+  medicamentos: Medicamento[];
+  indicaciones_generales: string;
+}
+
+export interface RecetasSolicitud {
+  recetas: Receta[];
+  propia?: Receta | null;
+  sugerencia?: SugerenciaReceta;
+}

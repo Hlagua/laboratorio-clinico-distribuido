@@ -14,6 +14,8 @@ TABLAS_SUPABASE = [
     "pago", "reembolso",
     # Base de conocimientos para diagnósticos (07_base_conocimiento.sql)
     "diagnostico", "protocolo", "regla_diagnostica", "regla_condicion", "sugerencia_diagnostica",
+    # Medicamentos y recetas (08_recetas.sql)
+    "medicamento", "diagnostico_medicamento", "receta", "receta_item",
 ]
 
 # Tablas copiadas 1:1 a MongoDB (tabla -> colección).

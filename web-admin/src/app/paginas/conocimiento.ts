@@ -2,7 +2,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
-import { Diagnostico, Regla, TipoExamen } from '../core/modelos';
+import { Diagnostico, Medicamento, Regla, TipoExamen } from '../core/modelos';
 import { paginarLocal, Paginador } from '../core/paginador';
 
 interface CondicionNueva { parametro_id: number | null; operador: string; valor: number | null; valor2: number | null }
@@ -64,7 +64,48 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
       <app-paginador [pagina]="vistaDiag()" (cambiar)="pd.set($event)" />
     </div>
 
+    <div class="card tabla-scroll">
+      <h2>Medicamentos (vademécum)</h2>
+      <p class="muted">Al recetar, el sistema propone los medicamentos de los diagnósticos sugeridos y completa su dosis e
+        indicaciones al escribir el nombre. El médico puede cambiarlo todo.</p>
+      <div class="buscador"><input type="search" placeholder="Buscar medicamento o diagnóstico CIE-10" [ngModel]="qm()"
+        (ngModelChange)="qm.set($event); pm.set(1)" /></div>
+      <table>
+        <thead><tr><th>Medicamento</th><th>Dosis y frecuencia</th><th>Indicaciones</th><th>Para</th></tr></thead>
+        <tbody>
+          @for (m of vistaMed().items; track m.medicamento_id) {
+            <tr><td><strong>{{ m.nombre }}</strong><br /><small class="muted">{{ m.presentacion }} · vía {{ m.via.toLowerCase() }}</small></td>
+              <td>{{ m.dosis }} {{ m.frecuencia }}{{ m.duracion_dias ? ' · ' + m.duracion_dias + ' días' : '' }}</td>
+              <td>{{ m.indicaciones }} @if (m.advertencias) { <br /><small class="advertencia">⚠ {{ m.advertencias }}</small> }</td>
+              <td>{{ m.diagnosticos }}</td></tr>
+          } @empty { <tr><td colspan="4" class="vacio">Ningún medicamento coincide.</td></tr> }
+        </tbody>
+      </table>
+      <app-paginador [pagina]="vistaMed()" (cambiar)="pm.set($event)" />
+    </div>
+
     @if (auth.tiene('ADMIN')) {
+      <form class="card" (ngSubmit)="guardarMedicamento()">
+        <h2>Agregar o actualizar un medicamento</h2>
+        <div class="fila">
+          <div class="campo"><label>Nombre genérico</label><input name="mn" [(ngModel)]="med.nombre" required /></div>
+          <div class="campo"><label>Presentación</label><input name="mp" [(ngModel)]="med.presentacion" placeholder="Tableta 500 mg" required /></div>
+          <div class="campo"><label>Vía</label><input name="mv" [(ngModel)]="med.via" /></div>
+        </div>
+        <div class="fila">
+          <div class="campo"><label>Dosis</label><input name="md" [(ngModel)]="med.dosis" placeholder="1 tableta (500 mg)" required /></div>
+          <div class="campo"><label>Frecuencia</label><input name="mf" [(ngModel)]="med.frecuencia" placeholder="cada 12 horas" required /></div>
+          <div class="campo"><label>Duración (días)</label><input name="mdu" type="number" min="1" [(ngModel)]="med.duracion_dias" /></div>
+        </div>
+        <div class="campo"><label>Indicaciones (cómo tomarlo)</label><textarea name="mi" [(ngModel)]="med.indicaciones" required></textarea></div>
+        <div class="campo"><label>Advertencias</label><input name="ma" [(ngModel)]="med.advertencias" /></div>
+        <div class="campo"><label>Se sugiere para (diagnósticos)</label>
+          <select name="mdx" multiple size="5" [(ngModel)]="med.diagnosticos">
+            @for (d of diagnosticos(); track d.diagnostico_id) { <option [ngValue]="d.diagnostico_id">{{ d.codigo_cie10 }} · {{ d.nombre }}</option> }
+          </select><small class="muted">Ctrl + clic para elegir varios. Si el nombre y la presentación ya existen, se actualiza.</small></div>
+        <button type="submit" [disabled]="!med.nombre || !med.presentacion || !med.dosis || !med.frecuencia || !med.indicaciones">Guardar medicamento</button>
+      </form>
+
       <form class="card" (ngSubmit)="guardar()">
         <h2>Nueva regla (o reemplazar una existente con el mismo código)</h2>
         <div class="fila">
@@ -106,7 +147,7 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
       </form>
     }
   `,
-  styles: `tr.inactiva td { opacity: .55; } .mini select, .mini input { flex: 1 1 110px; } h3 { margin-top: 12px; }`,
+  styles: `.advertencia { color: var(--ambar); } select[multiple] { width: 100%; } tr.inactiva td { opacity: .55; } .mini select, .mini input { flex: 1 1 110px; } h3 { margin-top: 12px; }`,
 })
 export class Conocimiento implements OnInit {
   private readonly api = inject(Api);
@@ -114,6 +155,12 @@ export class Conocimiento implements OnInit {
   protected readonly reglas = signal<Regla[]>([]);
   protected readonly diagnosticos = signal<Diagnostico[]>([]);
   protected readonly parametros = signal<{ parametro_id: number; nombre: string }[]>([]);
+  protected readonly medicamentos = signal<Medicamento[]>([]);
+  protected readonly qm = signal('');
+  protected readonly pm = signal(1);
+  protected readonly vistaMed = computed(() => paginarLocal(this.medicamentos(), this.pm(), this.qm(),
+    (m) => `${m.nombre} ${m.presentacion} ${m.diagnosticos ?? ''}`));
+  protected med = this.medicamentoVacio();
   protected readonly qr = signal('');
   protected readonly pr = signal(1);
   protected readonly qd = signal('');
@@ -152,12 +199,14 @@ export class Conocimiento implements OnInit {
 
   async cargar() {
     try {
-      const [r, d] = await Promise.all([
+      const [r, d, m] = await Promise.all([
         this.api.get<Regla[]>('/api/conocimiento/reglas'),
         this.api.get<Diagnostico[]>('/api/conocimiento/diagnosticos'),
+        this.api.get<Medicamento[]>('/api/medicamentos'),
       ]);
       this.reglas.set(r);
       this.diagnosticos.set(d);
+      this.medicamentos.set(m);
     } catch (e) {
       this.error.set(mensajeError(e));
     }
@@ -166,6 +215,27 @@ export class Conocimiento implements OnInit {
   async alternar(r: Regla) {
     await this.ejecutar(() => this.api.patch(`/api/conocimiento/reglas/${r.regla_id}`, { activa: !r.activa }),
       `Regla ${r.codigo} ${r.activa ? 'desactivada' : 'activada'}.`);
+  }
+
+  private medicamentoVacio() {
+    return { nombre: '', presentacion: '', via: 'Oral', dosis: '', frecuencia: '', duracion_dias: null as number | null,
+      indicaciones: '', advertencias: '', diagnosticos: [] as number[] };
+  }
+
+  async guardarMedicamento() {
+    this.error.set('');
+    this.aviso.set('');
+    try {
+      await this.api.post('/api/medicamentos', {
+        ...this.med, duracion_dias: this.med.duracion_dias ? Number(this.med.duracion_dias) : null,
+        advertencias: this.med.advertencias || null,
+      });
+      this.aviso.set(`Medicamento ${this.med.nombre} guardado.`);
+      this.med = this.medicamentoVacio();
+      await this.cargar();
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    }
   }
 
   async guardar() {

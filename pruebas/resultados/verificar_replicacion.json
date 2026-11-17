@@ -1,5 +1,5 @@
 {
-  "hora": "03:57:41",
+  "hora": "22:16:52",
   "supabase": [
     {
       "tabla": "persona",
@@ -81,50 +81,50 @@
     },
     {
       "tabla": "cita",
-      "azure_filas": 27,
-      "supabase_filas": 27,
+      "azure_filas": 30,
+      "supabase_filas": 30,
       "igual": true
     },
     {
       "tabla": "solicitud_examen",
-      "azure_filas": 13,
-      "supabase_filas": 13,
+      "azure_filas": 19,
+      "supabase_filas": 19,
       "igual": true
     },
     {
       "tabla": "solicitud_detalle",
-      "azure_filas": 22,
-      "supabase_filas": 22,
+      "azure_filas": 35,
+      "supabase_filas": 35,
       "igual": true
     },
     {
       "tabla": "resultado",
-      "azure_filas": 13,
-      "supabase_filas": 13,
+      "azure_filas": 21,
+      "supabase_filas": 21,
       "igual": true
     },
     {
       "tabla": "resultado_valor",
-      "azure_filas": 37,
-      "supabase_filas": 37,
+      "azure_filas": 57,
+      "supabase_filas": 57,
       "igual": true
     },
     {
       "tabla": "observacion_medica",
-      "azure_filas": 4,
-      "supabase_filas": 4,
+      "azure_filas": 8,
+      "supabase_filas": 8,
       "igual": true
     },
     {
       "tabla": "tratamiento",
-      "azure_filas": 5,
-      "supabase_filas": 5,
+      "azure_filas": 7,
+      "supabase_filas": 7,
       "igual": true
     },
     {
       "tabla": "pago",
-      "azure_filas": 17,
-      "supabase_filas": 17,
+      "azure_filas": 21,
+      "supabase_filas": 21,
       "igual": true
     },
     {
@@ -159,8 +159,32 @@
     },
     {
       "tabla": "sugerencia_diagnostica",
-      "azure_filas": 6,
-      "supabase_filas": 6,
+      "azure_filas": 8,
+      "supabase_filas": 8,
+      "igual": true
+    },
+    {
+      "tabla": "medicamento",
+      "azure_filas": 10,
+      "supabase_filas": 10,
+      "igual": true
+    },
+    {
+      "tabla": "diagnostico_medicamento",
+      "azure_filas": 11,
+      "supabase_filas": 11,
+      "igual": true
+    },
+    {
+      "tabla": "receta",
+      "azure_filas": 0,
+      "supabase_filas": 0,
+      "igual": true
+    },
+    {
+      "tabla": "receta_item",
+      "azure_filas": 0,
+      "supabase_filas": 0,
       "igual": true
     }
   ],
@@ -168,43 +192,43 @@
     {
       "tabla": "auditoria",
       "coleccion": "auditoria",
-      "azure": 247,
-      "mongo": 247,
+      "azure": 321,
+      "mongo": 321,
       "igual": true
     },
     {
       "tabla": "notificacion",
       "coleccion": "notificaciones",
-      "azure": 27,
-      "mongo": 27,
+      "azure": 36,
+      "mongo": 36,
       "igual": true
     },
     {
       "tabla": "resultado",
       "coleccion": "resultados",
-      "azure": 13,
-      "mongo": 13,
+      "azure": 21,
+      "mongo": 21,
       "igual": true
     },
     {
       "tabla": "pago",
       "coleccion": "pagos",
-      "azure": 17,
-      "mongo": 17,
+      "azure": 21,
+      "mongo": 21,
       "igual": true
     },
     {
       "tabla": "stripe_evento",
       "coleccion": "stripe_eventos",
-      "azure": 0,
-      "mongo": 0,
+      "azure": 2,
+      "mongo": 2,
       "igual": true
     }
   ],
   "versiones": {
-    "azure": 431,
-    "supabase": 431,
-    "mongodb": 431
+    "azure": 571,
+    "supabase": 571,
+    "mongodb": 571
   },
   "diferencias": 0
 }

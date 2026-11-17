@@ -160,6 +160,7 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
                   ),
                 ),
               for (final ex in examenes) _Examen(ex),
+              if (['EN_PROCESO', 'COMPLETADA'].contains(s['estado'])) _Recetas(solicitudId: widget.id),
             ]);
           },
         ),
@@ -446,6 +447,105 @@ class ResumenPedido extends StatelessWidget {
         Text('(${s['iva_porcentaje']} % de IVA incluido en el precio de cada examen)',
             style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ]),
+    );
+  }
+}
+
+
+/// Recetas del médico para esta solicitud: medicamentos a la izquierda e indicaciones a la derecha.
+class _Recetas extends StatefulWidget {
+  const _Recetas({required this.solicitudId});
+  final int solicitudId;
+
+  @override
+  State<_Recetas> createState() => _RecetasState();
+}
+
+class _RecetasState extends State<_Recetas> {
+  late final Future<List<dynamic>> _recetas = _cargar();
+
+  Future<List<dynamic>> _cargar() async =>
+      ((await api.get('/api/recetas/solicitud/${widget.solicitudId}')) as Map<String, dynamic>)['recetas'] as List<dynamic>;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<dynamic>>(
+        future: _recetas,
+        builder: (context, s) {
+          final recetas = (s.data ?? const []).cast<Map<String, dynamic>>();
+          if (recetas.isEmpty) return const SizedBox.shrink();
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            for (final r in recetas) _receta(context, r),
+          ]);
+        },
+      );
+
+  Widget _receta(BuildContext context, Map<String, dynamic> r) {
+    final items = (r['items'] as List).cast<Map<String, dynamic>>();
+    const titulo = TextStyle(fontWeight: FontWeight.bold, color: verde, fontSize: 16);
+    final rp = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Rp.', style: titulo),
+      for (final i in items)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text('${i['orden']}. ${i['nombre']} ${i['presentacion'] ?? ''}'
+              '${i['cantidad'] != null ? '\nCantidad: ${i['cantidad']}' : ''}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
+    ]);
+    final indicaciones = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Indicaciones', style: titulo),
+      for (final i in items)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text.rich(TextSpan(children: [
+            TextSpan(text: '${i['orden']}. ${i['nombre']}: ', style: const TextStyle(fontWeight: FontWeight.w600)),
+            TextSpan(
+                text: '${i['dosis']} ${i['frecuencia']}${i['duracion_dias'] != null ? ' por ${i['duracion_dias']} días' : ''}. '
+                    '${i['indicaciones'] ?? ''}'),
+          ])),
+        ),
+      if (r['indicaciones_generales'] != null) ...[
+        const SizedBox(height: 10),
+        const Text('Además', style: TextStyle(fontWeight: FontWeight.bold)),
+        Text(r['indicaciones_generales'] as String),
+      ],
+    ]);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.medication, color: verde),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Receta de Dr(a). ${r['medico']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.picture_as_pdf),
+              label: const Text('Receta (PDF)'),
+              onPressed: () async {
+                try {
+                  await api.abrirPdf('/api/recetas/${r['receta_id']}/pdf');
+                } catch (e) {
+                  if (context.mounted) mostrarMensaje(context, '$e', error: true);
+                }
+              },
+            ),
+          ]),
+          if (r['diagnostico'] != null) Text('Diagnóstico: ${r['diagnostico']}', style: const TextStyle(color: Colors.grey)),
+          const Divider(),
+          // Como en la receta impresa: izquierda la receta, derecha las indicaciones (en el celular, una debajo de otra).
+          LayoutBuilder(
+            builder: (_, c) => c.maxWidth > 600
+                ? IntrinsicHeight(
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Expanded(child: rp),
+                      const VerticalDivider(width: 28),
+                      Expanded(child: indicaciones),
+                    ]),
+                  )
+                : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [rp, const Divider(height: 24), indicaciones]),
+          ),
+        ]),
+      ),
     );
   }
 }

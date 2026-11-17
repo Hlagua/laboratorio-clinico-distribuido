@@ -68,6 +68,10 @@ export class Api {
     return firstValueFrom(this.http.post<T>(url, cuerpo));
   }
 
+  put<T>(url: string, cuerpo: unknown): Promise<T> {
+    return firstValueFrom(this.http.put<T>(url, cuerpo));
+  }
+
   patch<T>(url: string, cuerpo: unknown): Promise<T> {
     return firstValueFrom(this.http.patch<T>(url, cuerpo));
   }

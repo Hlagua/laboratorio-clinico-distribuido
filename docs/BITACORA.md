@@ -92,6 +92,7 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D40 | **Color por rol**: paciente verde, médico azul, laboratorista morado, administrador gris pizarra | Evita trabajar con el rol equivocado. Se redefine la paleta con una clase `.rol-*` sobre el marco, sin tocar cada pantalla. | Solo un letrero con el rol |
 | D41 | **Precios con IVA incluido** y desglose al final (subtotal, IVA, total). Factura en PDF y XML con la estructura del SRI | No cambia lo que se cobra ni el esquema de la base. Se muestra lo que se compra antes de pagar y se entrega la factura por correo. | Sumar el IVA encima del precio, lo que cambia todos los totales y el procedimiento `sp_crear_solicitud` |
 | D42 | Adjuntos del correo **generados al enviar**, buscando la solicitud por el código del asunto | No hace falta una columna nueva en `notificacion`, que también se replica a Supabase. Si el documento falla, el correo sale igual. | Columna `solicitud_id` en `notificacion` (cambio de esquema en las 2 bases) |
+| D43 | **Receta sugerida por la base de conocimientos**, editable por el médico. Vademécum en Azure SQL (`medicamento`, `diagnostico_medicamento`) | Recetar parte de lo que ya sugieren las reglas (diagnóstico → medicamentos → indicaciones). Se guarda la receta del médico y si modificó la sugerencia, lo que permite medir cuánto se usa. Formato habitual: receta a la izquierda, indicaciones a la derecha. | Vademécum en MongoDB (no se replica a Supabase ni tiene integridad referencial con la receta); autocompletar con IA |
 
 ## 5. Registro cronológico
 
@@ -370,6 +371,15 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
   - Angular y Flutter compilan sin observaciones.
   - Datos de prueba que quedan: SOL-2026-000018 de Sofía (pagada y con resultados) y otra solicitud de Sofía sin pagar, que dejó el flujo de cita.
   - No se probó en el navegador el diálogo de roles ni las pantallas internas: exigen ingresar contraseñas en el sitio publicado. Queda para el equipo.
+
+### 2026-11-17 — Receta con la base de conocimientos (D43)
+- **Base de datos:**
+  - `08_recetas.sql` (Azure SQL) crea el vademécum (10 medicamentos y 11 relaciones con diagnósticos), la receta, sus medicamentos y 2 procedimientos.
+  - `04_recetas.sql` crea las mismas tablas en la réplica de Supabase; el sincronizador replica las 4 tablas nuevas.
+  - Orden usado: primero Supabase, luego el despliegue del sincronizador y al final el script de Azure. Así la carga inicial también se replicó. Si el sincronizador no las conoce, avanza la versión y esas filas no se copian.
+- **API y pantallas:** sistema del personal (panel de receta debajo de los resultados y vademécum en Base de conocimientos), portal del paciente (receta en dos columnas y PDF) y PDF horizontal con el formato habitual.
+- **Pruebas:** receta 11/11, consultas en Supabase OK y réplica CONSISTENTE en 31 tablas (versión 571). Quedó de dato de prueba la receta de la SOL-2026-000018 (Sofía).
+- No se probó en el navegador el panel del médico: hay que ingresar con contraseña en el sitio publicado. Queda para el equipo.
 
 ## 6. Pendientes
 

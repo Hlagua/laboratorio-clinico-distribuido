@@ -90,6 +90,34 @@ Errores de negocio:
 | 50086 | 403 | El tratamiento no pertenece al paciente |
 | 50080, 50087, 50088 | 422 | JSON inválido o regla sin condiciones |
 
+## 4.1 Receta e indicaciones (D43, `08_recetas.sql`)
+
+La base de conocimientos también propone **la receta**. Lo que propone son sugerencias: el médico cambia, quita o agrega lo que quiera, y se guarda **su** receta.
+
+**Datos:**
+- `medicamento`: vademécum básico (10 medicamentos) con presentación, vía, dosis, frecuencia, duración, indicaciones y advertencias. Dosis referenciales de adulto, con fines académicos.
+- `diagnostico_medicamento`: qué medicamentos se suelen indicar para cada diagnóstico CIE-10. Por ejemplo, E11 → metformina, D64.9 → sulfato ferroso y ácido fólico, E78.0 → atorvastatina.
+- `receta` y `receta_item`: la receta del médico, una por solicitud y médico. De cada medicamento se guarda si el médico **modificó** lo sugerido.
+- Las 4 tablas tienen Change Tracking y se replican a Supabase (31 tablas en total), así que la receta se puede consultar también en contingencia.
+
+**En la pantalla de la solicitud** (sistema del personal, debajo de los resultados):
+- **Izquierda, Rp.:** los medicamentos. Si el médico no tiene receta guardada, aparece la propuesta de la base, armada con los medicamentos de los diagnósticos sugeridos que el médico no descartó.
+- **Derecha, Indicaciones:** cómo tomar cada medicamento y sus advertencias. Debajo, "Además", con el protocolo y la recomendación de cada diagnóstico (dieta, controles, exámenes de confirmación).
+- **Al escribir el nombre de un medicamento**, la lista del vademécum aparece y la dosis, la frecuencia, la duración y las indicaciones se completan solas. Se pueden editar; si el médico las cambia, la fila queda marcada "modificado por el médico".
+- Hay botones para agregar otro medicamento sugerido y también se pueden recetar medicamentos que no están en la base.
+- El paciente ve la receta en su portal, con la misma división izquierda/derecha, y la descarga en PDF. El PDF va en hoja horizontal, con el formato habitual de receta y espacio para la firma.
+- El administrador edita el vademécum en **Base de conocimientos → Medicamentos**.
+
+| Método | Ruta | Roles | Uso |
+|---|---|---|---|
+| GET | `/api/medicamentos?q=` | Médico, admin | Vademécum (búsqueda por nombre o presentación) |
+| POST | `/api/medicamentos` | Admin | Crea o actualiza un medicamento y a qué diagnósticos se asocia |
+| GET | `/api/recetas/solicitud/<id>` | Médico, admin, laboratorista, paciente dueño | Recetas de la solicitud; al médico, además, `propia` y `sugerencia` |
+| PUT | `/api/recetas/solicitud/<id>` | Médico | Guarda o reemplaza su receta: `{diagnostico, indicaciones_generales, items: [...]}` |
+| GET | `/api/recetas/<id>/pdf` | Médico, admin, laboratorista, paciente dueño | Receta en PDF |
+
+Errores: 50090–50092 (422, receta vacía o incompleta), 50093 (404), 50094 (409, la solicitud aún no tiene resultados), 50095 (403, un médico no puede recetarse a sí mismo).
+
 ## 5. Pruebas
 
 - **Local** (LocalDB + PostgreSQL y MongoDB embebidos): **25/25**. Cubre el motor como función pura (límites de `ENTRE`, sexo, edad, lógica), el registro idempotente, las respuestas del médico, los permisos, la réplica y las guías.
@@ -100,7 +128,15 @@ Errores de negocio:
   - El médico descartó una sugerencia; responderla otra vez dio 409.
   - Permisos: 403 para médico y laboratorista donde no corresponde, 401 sin token, 422 para una regla inválida.
   - Réplica en Supabase igual a Azure en las 5 tablas.
-- `pruebas/verificar_replicacion.py` ahora compara **27 tablas**.
+- **Receta** (17-11, por el dominio público): **11/11**. Cubre:
+  - la base propuso metformina para E11, con las indicaciones de su protocolo;
+  - al buscar "metf" aparece la metformina con su dosis;
+  - el médico guardó la receta con la dosis cambiada (marcada como modificada) y con un medicamento fuera de la base, y luego la actualizó;
+  - el paciente la ve sin las sugerencias internas; otro paciente recibe 403;
+  - el PDF se genera;
+  - 422 si la receta está vacía; 403 si receta un laboratorista o si un médico edita el vademécum;
+  - las consultas también funcionan en Supabase (contingencia).
+- `pruebas/verificar_replicacion.py` ahora compara **31 tablas**: CONSISTENTE.
 
 | | |
 |---|---|

@@ -5,6 +5,7 @@ import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
 import { claseEstado, dinero, fechaHora, rango, textoEstado } from '../core/formato';
 import { ExamenSolicitado, Parametro, Solicitud, TipoExamen } from '../core/modelos';
+import { RecetaPanel } from './receta';
 import { Sugerencias } from './sugerencias';
 
 /** Valor que el laboratorista escribe por parámetro (número o texto cualitativo). */
@@ -12,7 +13,7 @@ interface Captura { parametro: Parametro; valor: string }
 
 @Component({
   selector: 'app-solicitud-detalle',
-  imports: [FormsModule, RouterLink, Sugerencias],
+  imports: [FormsModule, RouterLink, Sugerencias, RecetaPanel],
   template: `
     <button type="button" class="secundario chico" routerLink="/solicitudes">← Volver a solicitudes</button>
     @if (error()) { <div class="alerta error">{{ error() }}</div> }
@@ -112,6 +113,13 @@ interface Captura { parametro: Parametro; valor: string }
             <p class="muted">Resultado pendiente.</p>
           }
         </div>
+      }
+
+      <!-- Receta: el médico la escribe con la propuesta de la base de conocimientos; los demás la consultan. -->
+      @if (tieneResultados() && ['EN_PROCESO', 'COMPLETADA'].includes(s.estado)) {
+        @for (k of [cantidadResultados()]; track k) {
+          <app-receta [solicitudId]="s.solicitud_id" />
+        }
       }
     } @else if (!error()) {
       <p class="muted">Cargando…</p>

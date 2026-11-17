@@ -128,3 +128,60 @@ def pdf_factura(f: dict) -> bytes:
                      "del SRI (XML adjunto) pero no está firmado ni autorizado, por lo que no tiene validez tributaria.", _pequeno),
            Paragraph(f"Generado: {_hora_ecuador()} (hora de Ecuador)", _pequeno)]
     return _documento(el)
+
+
+def _edad_texto(nacimiento) -> str:
+    if not nacimiento:
+        return ""
+    hoy = datetime.now(timezone.utc).date()
+    n = nacimiento if not isinstance(nacimiento, str) else datetime.fromisoformat(nacimiento[:10]).date()
+    return f"{hoy.year - n.year - ((hoy.month, hoy.day) < (n.month, n.day))} años"
+
+
+def pdf_receta(r: dict) -> bytes:
+    """Receta en el formato habitual: medicamentos a la izquierda (Rp.) e indicaciones a la derecha."""
+    from reportlab.lib.pagesizes import landscape
+
+    sub = ParagraphStyle("sub", parent=_normal, fontSize=11, textColor=VERDE, fontName="Helvetica-Bold", spaceAfter=4)
+    fecha = (r["updated_at"] - timedelta(hours=5)).strftime("%d/%m/%Y")
+    cabecera = [
+        Paragraph("Laboratorio Clínico — Receta médica", _titulo),
+        Paragraph(f"<b>Dr(a).</b> {_e(r['medico'])} · {_e(r['especialidad'] or '')} · Reg. {_e(r['registro_profesional'] or '')}"
+                  f" &nbsp; <b>Fecha:</b> {fecha} &nbsp; <b>Solicitud:</b> {r['solicitud_codigo']}", _normal),
+        Paragraph(f"<b>Paciente:</b> {_e(r['paciente'])} &nbsp; <b>Cédula:</b> {r['cedula']} &nbsp; "
+                  f"<b>Edad:</b> {_edad_texto(r['fecha_nacimiento'])}", _normal),
+    ]
+    if r.get("diagnostico"):
+        cabecera.append(Paragraph(f"<b>Diagnóstico:</b> {_e(r['diagnostico'])}", _normal))
+    cabecera.append(Spacer(1, 0.3 * cm))
+
+    izquierda = [Paragraph("Rp.", sub)]
+    derecha = [Paragraph("Indicaciones", sub)]
+    for n, i in enumerate(r["items"], start=1):
+        duracion = f" por {i['duracion_dias']} días" if i["duracion_dias"] else ""
+        izquierda.append(Paragraph(
+            f"<b>{n}. {_e(i['nombre'])}</b> {_e(i['presentacion'] or '')}"
+            + (f"<br/>Cantidad: {_e(i['cantidad'])}" if i.get("cantidad") else "")
+            + f"<br/><font color='#555555'>Vía {_e((i['via'] or 'oral').lower())}</font>", _celda))
+        izquierda.append(Spacer(1, 0.25 * cm))
+        derecha.append(Paragraph(
+            f"<b>{n}. {_e(i['nombre'])}:</b> {_e(i['dosis'])} {_e(i['frecuencia'])}{duracion}."
+            + (f" {_e(i['indicaciones'])}" if i.get("indicaciones") else ""), _celda))
+        derecha.append(Spacer(1, 0.25 * cm))
+    if r.get("indicaciones_generales"):
+        derecha += [Spacer(1, 0.2 * cm), Paragraph("Además:", sub)]
+        derecha += [Paragraph(_e(linea), _celda) for linea in r["indicaciones_generales"].splitlines() if linea.strip()]
+
+    cuerpo = Table([[izquierda, derecha]], colWidths=[11.5 * cm, 13.5 * cm])
+    cuerpo.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEAFTER", (0, 0), (0, 0), 0.6, colors.grey),
+                                ("BOX", (0, 0), (-1, -1), 0.6, colors.grey), ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                                ("RIGHTPADDING", (0, 0), (-1, -1), 10), ("TOPPADDING", (0, 0), (-1, -1), 8)]))
+    firma = Table([["", "______________________________"], ["", f"Dr(a). {r['medico']}"]], colWidths=[13 * cm, 12 * cm])
+    firma.setStyle(TableStyle([("ALIGN", (1, 0), (1, -1), "CENTER"), ("FONTSIZE", (0, 0), (-1, -1), 9)]))
+    el = cabecera + [cuerpo, Spacer(1, 1.2 * cm), firma, Spacer(1, 0.3 * cm),
+                     Paragraph("Receta emitida con fines académicos. La base de conocimientos solo sugiere; "
+                               "el tratamiento lo decide el médico.", _pequeno)]
+    buffer = BytesIO()
+    SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=1.5 * cm, rightMargin=1.5 * cm, topMargin=1.2 * cm,
+                      bottomMargin=1.2 * cm, title="Receta médica").build(el)
+    return buffer.getvalue()
