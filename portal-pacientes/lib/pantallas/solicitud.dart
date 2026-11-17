@@ -64,6 +64,14 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
     }
   }
 
+  Future<void> _documento(String ruta, String tipo, {String? nombre}) async {
+    try {
+      await api.abrirArchivo(ruta, tipo, nombre: nombre);
+    } catch (e) {
+      if (mounted) mostrarMensaje(context, '$e', error: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,8 +97,10 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Pendiente de pago: ${dinero(s['total'])}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('Revise su pedido antes de pagar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       const SizedBox(height: 10),
+                      ResumenPedido(s),
+                      const SizedBox(height: 14),
                       Wrap(spacing: 10, runSpacing: 8, children: [
                         FilledButton.icon(
                           onPressed: _procesando ? null : _pagarConTarjeta,
@@ -106,6 +116,31 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
                       const SizedBox(height: 6),
                       const Text('El pago con tarjeta se procesa en la página segura de Stripe (modo de prueba).',
                           style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ]),
+                  ),
+                ),
+              if (['PAGADA', 'EN_PROCESO', 'COMPLETADA'].contains(s['estado']))
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('Pedido pagado', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 10),
+                      ResumenPedido(s),
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 10, runSpacing: 8, children: [
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.receipt_long),
+                          label: const Text('Factura (PDF)'),
+                          onPressed: () => _documento('/api/pagos/factura/${widget.id}', 'application/pdf'),
+                        ),
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.code),
+                          label: const Text('Factura (XML)'),
+                          onPressed: () => _documento('/api/pagos/factura/${widget.id}?formato=xml', 'application/xml',
+                              nombre: 'factura-${s['codigo']}.xml'),
+                        ),
+                      ]),
                     ]),
                   ),
                 ),
@@ -161,13 +196,14 @@ class _Examen extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: Text(
-                      '${v['valor_texto'] ?? v['valor_numerico']} ${v['unidad'] ?? ''}${v['fuera_rango'] == true ? '  ⚠' : ''}',
+                      '${v['valor_texto'] ?? v['valor_numerico']} ${v['unidad'] ?? ''}',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: v['fuera_rango'] == true ? rojo : null,
                       ),
                     ),
                   ),
+                  Expanded(flex: 2, child: Indicador(v['nivel'] as String?)),
                   Expanded(
                     flex: 2,
                     child: Text(
@@ -179,7 +215,8 @@ class _Examen extends StatelessWidget {
                 ]),
               ),
             if (valores.any((v) => v['fuera_rango'] == true))
-              const Text('⚠ Fuera del rango de referencia. Consulte con su médico.', style: TextStyle(color: rojo, fontSize: 12)),
+              const Text('Hay valores fuera del rango de referencia (↑ alto, ↓ bajo). Consulte con su médico.',
+                  style: TextStyle(color: rojo, fontSize: 12)),
           ],
           for (final o in obs)
             Container(
@@ -207,6 +244,9 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
   late Future<List<dynamic>> _catalogo = _cargar();
   final _elegidos = <int>{};
   bool _enviando = false;
+  String _buscar = '';
+  int _pagina = 0;
+  static const porPagina = 10;
   late int? _citaId = widget.citaId;
   // Citas pendientes de pago que aún no tienen exámenes: se pueden vincular aquí.
   List<Map<String, dynamic>> _citasLibres = [];
@@ -262,6 +302,13 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
           constructor: (lista) {
             final tipos = lista.cast<Map<String, dynamic>>();
             final total = tipos.where((t) => _elegidos.contains(t['tipo_examen_id'])).fold<num>(0, (a, t) => a + (t['precio'] as num));
+            // Buscador y páginas de 10; los exámenes marcados se conservan al cambiar de página.
+            final filtrados = tipos
+                .where((t) => _buscar.isEmpty || '${t['nombre']} ${t['categoria']} ${t['codigo']}'.toLowerCase().contains(_buscar))
+                .toList();
+            final paginas = (filtrados.length / porPagina).ceil().clamp(1, 1 << 30);
+            final pagina = _pagina.clamp(0, paginas - 1);
+            final visibles = filtrados.skip(pagina * porPagina).take(porPagina);
             return Column(children: [
               if (widget.citaId != null)
                 const Padding(
@@ -288,7 +335,15 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
                 ),
               Expanded(
                 child: ListView(padding: const EdgeInsets.all(12), children: [
-                  for (final t in tipos)
+                  TextField(
+                    decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar examen o categoría'),
+                    onChanged: (v) => setState(() {
+                      _buscar = v.trim().toLowerCase();
+                      _pagina = 0;
+                    }),
+                  ),
+                  const SizedBox(height: 6),
+                  for (final t in visibles)
                     Card(
                       child: CheckboxListTile(
                         value: _elegidos.contains(t['tipo_examen_id']),
@@ -300,6 +355,17 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
                             '${t['requiere_ayuno'] == true ? ' · requiere ayuno' : ''}'),
                       ),
                     ),
+                  if (filtrados.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Ningún examen coincide.'))),
+                  if (paginas > 1)
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      IconButton(
+                          onPressed: pagina > 0 ? () => setState(() => _pagina = pagina - 1) : null,
+                          icon: const Icon(Icons.chevron_left)),
+                      Text('Página ${pagina + 1} de $paginas (${filtrados.length} exámenes)'),
+                      IconButton(
+                          onPressed: pagina < paginas - 1 ? () => setState(() => _pagina = pagina + 1) : null,
+                          icon: const Icon(Icons.chevron_right)),
+                    ]),
                 ]),
               ),
               Material(
@@ -307,7 +373,13 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Row(children: [
-                    Expanded(child: Text('Total: ${dinero(total)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                        Text('Total: ${dinero(total)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text('${_elegidos.length} examen(es) · IVA incluido · verá el detalle antes de pagar',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      ]),
+                    ),
                     FilledButton(
                       onPressed: _elegidos.isEmpty || _enviando ? null : _crear,
                       child: Text(_enviando ? 'Creando…' : 'Continuar al pago'),
@@ -319,6 +391,61 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
           },
         ),
       ),
+    );
+  }
+}
+
+
+/// Indicador del resultado frente al rango de referencia: ↑ alto, ↓ bajo, – normal.
+class Indicador extends StatelessWidget {
+  const Indicador(this.nivel, {super.key});
+  final String? nivel;
+
+  @override
+  Widget build(BuildContext context) {
+    final (texto, color) = switch (nivel) {
+      'ALTO' => ('↑ alto', rojo),
+      'BAJO' => ('↓ bajo', rojo),
+      'ANORMAL' => ('fuera de rango', rojo),
+      _ => ('– normal', Colors.grey.shade700),
+    };
+    return Text(texto, style: TextStyle(color: color, fontWeight: FontWeight.w600));
+  }
+}
+
+/// Resumen del pedido, como en una tienda: cada examen, luego subtotal, IVA y total.
+class ResumenPedido extends StatelessWidget {
+  const ResumenPedido(this.s, {super.key});
+  final Map<String, dynamic> s;
+
+  Widget _fila(String a, String b, {bool fuerte = false, double tam = 14}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          Expanded(child: Text(a, style: TextStyle(fontSize: tam, fontWeight: fuerte ? FontWeight.bold : null))),
+          Text(b, style: TextStyle(fontSize: tam, fontWeight: fuerte ? FontWeight.bold : null)),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final examenes = (s['examenes'] as List).cast<Map<String, dynamic>>().where((e) => e['estado'] != 'ANULADO').toList();
+    final n = examenes.length;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: const Color(0xFFF1F1F1), borderRadius: BorderRadius.circular(6)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('RESUMEN DEL PEDIDO', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: .5)),
+        const SizedBox(height: 8),
+        for (final e in examenes) _fila(e['examen'] as String, dinero(e['precio_unitario'])),
+        if (s['cita_id'] != null) _fila('Cita para la toma de muestras', 'sin costo'),
+        const Divider(),
+        _fila('Subtotal ($n examen${n == 1 ? '' : 'es'}, sin IVA)', dinero(s['subtotal'])),
+        _fila('IVA ${s['iva_porcentaje']} %', dinero(s['iva'])),
+        const Divider(),
+        _fila('Total del pedido', dinero(s['total']), fuerte: true, tam: 18),
+        Text('(${s['iva_porcentaje']} % de IVA incluido en el precio de cada examen)',
+            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ]),
     );
   }
 }

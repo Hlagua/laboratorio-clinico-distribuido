@@ -21,6 +21,13 @@
   background: var(--fondo);
 }
 
+/* Cada rol trabaja con su color para no confundir en qué portal se está.
+   Deben coincidir con coloresRol de portal-pacientes/lib/comun.dart. */
+.rol-PACIENTE { --verde: #0b6e4f; --verde-oscuro: #08513a; --verde-suave: #e6f2ee; }
+.rol-MEDICO { --verde: #1d5fa8; --verde-oscuro: #143f73; --verde-suave: #e8f0fa; }
+.rol-LABORATORISTA { --verde: #6a3fa0; --verde-oscuro: #4a2a73; --verde-suave: #f1ebf8; }
+.rol-ADMIN { --verde: #37474f; --verde-oscuro: #232e33; --verde-suave: #eceff1; }
+
 * { box-sizing: border-box; }
 body { margin: 0; font-size: 14px; line-height: 1.45; }
 h1 { font-size: 22px; margin: 0 0 4px; }
@@ -87,3 +94,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .card { padding: 14px; }
   h1 { font-size: 19px; }
 }
+
+/* Buscador sobre las tablas paginadas */
+.buscador { margin-bottom: 10px; }
+.buscador input { width: 100%; max-width: 420px; }

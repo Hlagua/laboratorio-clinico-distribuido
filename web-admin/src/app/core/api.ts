@@ -1,6 +1,5 @@
 import { inject, Injectable, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
-import { Router } from '@angular/router';
 import { firstValueFrom, tap } from 'rxjs';
 import { AuthService } from './auth';
 
@@ -16,7 +15,6 @@ export class EstadoSistema {
 export const apiInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
   const estado = inject(EstadoSistema);
-  const router = inject(Router);
   const token = auth.token();
   const rol = auth.rolActivo();
   if (token && req.url.startsWith('/api/') && !req.url.startsWith('/api/auth/login')) {
@@ -37,8 +35,7 @@ export const apiInterceptor: HttpInterceptorFn = (req, next) => {
       error: (e: HttpErrorResponse) => {
         if (e.status === 503 && e.error?.codigo === 'MODO_CONTINGENCIA') estado.origenDatos.set('supabase');
         if (e.status === 401 && token && !req.url.startsWith('/api/auth/login')) {
-          auth.logout();
-          router.navigateByUrl('/login');
+          auth.logout(); // vuelve al login único
         }
       },
     }),
@@ -79,11 +76,18 @@ export class Api {
     return firstValueFrom(this.http.delete<T>(url));
   }
 
-  /** Descarga un archivo protegido (PDF) y lo abre en otra pestaña. */
-  async abrirArchivo(url: string): Promise<void> {
+  /** Descarga un archivo protegido: sin nombre lo abre en otra pestaña (PDF); con nombre lo guarda (XML). */
+  async abrirArchivo(url: string, nombre?: string): Promise<void> {
     const blob = await firstValueFrom(this.http.get(url, { responseType: 'blob' }));
     const enlace = URL.createObjectURL(blob);
-    window.open(enlace, '_blank');
+    if (nombre) {
+      const a = document.createElement('a');
+      a.href = enlace;
+      a.download = nombre;
+      a.click();
+    } else {
+      window.open(enlace, '_blank');
+    }
     setTimeout(() => URL.revokeObjectURL(enlace), 60_000);
   }
 }

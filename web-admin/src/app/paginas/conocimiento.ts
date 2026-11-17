@@ -1,8 +1,9 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
 import { Diagnostico, Regla, TipoExamen } from '../core/modelos';
+import { paginarLocal, Paginador } from '../core/paginador';
 
 interface CondicionNueva { parametro_id: number | null; operador: string; valor: number | null; valor2: number | null }
 
@@ -10,7 +11,7 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
 
 @Component({
   selector: 'app-conocimiento',
-  imports: [FormsModule],
+  imports: [FormsModule, Paginador],
   template: `
     <h1>Base de conocimientos</h1>
     <p class="sub">Reglas que relacionan resultados de laboratorio con diagnósticos CIE-10. El motor las evalúa al registrar
@@ -20,10 +21,11 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
 
     <div class="card tabla-scroll">
       <h2>Reglas diagnósticas</h2>
+      <div class="buscador"><input type="search" placeholder="Buscar por código, diagnóstico o CIE-10" [ngModel]="qr()" (ngModelChange)="qr.set($event); pr.set(1)" /></div>
       <table>
         <thead><tr><th>Regla</th><th>Si…</th><th>Sugiere</th><th>Confianza</th><th class="num">Precisión</th><th>Estado</th></tr></thead>
         <tbody>
-          @for (r of reglas(); track r.regla_id) {
+          @for (r of vistaReglas().items; track r.regla_id) {
             <tr [class.inactiva]="!r.activa">
               <td><strong>{{ r.codigo }}</strong>
                 @if (r.sexo) { <br /><small class="muted">solo {{ r.sexo === 'F' ? 'mujeres' : 'hombres' }}</small> }</td>
@@ -41,22 +43,25 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
                 }
               </td>
             </tr>
-          }
+          } @empty { <tr><td colspan="6" class="vacio">Ninguna regla coincide.</td></tr> }
         </tbody>
       </table>
+      <app-paginador [pagina]="vistaReglas()" (cambiar)="pr.set($event)" />
     </div>
 
     <div class="card tabla-scroll">
       <h2>Diagnósticos y protocolos</h2>
+      <div class="buscador"><input type="search" placeholder="Buscar por CIE-10, diagnóstico o protocolo" [ngModel]="qd()" (ngModelChange)="qd.set($event); pd.set(1)" /></div>
       <table>
         <thead><tr><th>CIE-10</th><th>Diagnóstico</th><th>Protocolo sugerido</th></tr></thead>
         <tbody>
-          @for (d of diagnosticos(); track d.diagnostico_id) {
+          @for (d of vistaDiag().items; track d.diagnostico_id) {
             <tr><td><strong>{{ d.codigo_cie10 }}</strong></td><td>{{ d.nombre }}<br /><small class="muted">{{ d.descripcion }}</small></td>
               <td>{{ d.protocolo }} @if (d.duracion_dias) { <small class="muted">({{ d.duracion_dias }} días)</small> }</td></tr>
-          }
+          } @empty { <tr><td colspan="3" class="vacio">Ningún diagnóstico coincide.</td></tr> }
         </tbody>
       </table>
+      <app-paginador [pagina]="vistaDiag()" (cambiar)="pd.set($event)" />
     </div>
 
     @if (auth.tiene('ADMIN')) {
@@ -109,6 +114,14 @@ export class Conocimiento implements OnInit {
   protected readonly reglas = signal<Regla[]>([]);
   protected readonly diagnosticos = signal<Diagnostico[]>([]);
   protected readonly parametros = signal<{ parametro_id: number; nombre: string }[]>([]);
+  protected readonly qr = signal('');
+  protected readonly pr = signal(1);
+  protected readonly qd = signal('');
+  protected readonly pd = signal(1);
+  protected readonly vistaReglas = computed(() => paginarLocal(this.reglas(), this.pr(), this.qr(),
+    (r) => `${r.codigo} ${r.codigo_cie10} ${r.diagnostico} ${r.recomendacion}`));
+  protected readonly vistaDiag = computed(() => paginarLocal(this.diagnosticos(), this.pd(), this.qd(),
+    (d) => `${d.codigo_cie10} ${d.nombre} ${d.descripcion} ${d.protocolo}`));
   protected readonly error = signal('');
   protected readonly aviso = signal('');
   protected n = this.vacia();

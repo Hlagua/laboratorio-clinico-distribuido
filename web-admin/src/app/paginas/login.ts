@@ -1,66 +1,18 @@
-import { Component, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { mensajeError } from '../core/api';
-import { AuthService } from '../core/auth';
+import { Component, OnInit } from '@angular/core';
+import { URL_LOGIN } from '../core/auth';
 
+/**
+ * El login es uno solo para toda la plataforma: /ingresar (portal Flutter).
+ * Ahí se elige el rol si la persona tiene varios y, si es del personal,
+ * vuelve a /admin con la sesión ya iniciada. Esta ruta solo redirige.
+ */
 @Component({
   selector: 'app-login',
-  imports: [FormsModule],
-  template: `
-    <div class="fondo">
-      <form class="card caja" (ngSubmit)="entrar()">
-        <div class="marca"><span>⚕</span> Laboratorio Clínico</div>
-        <h1>Sistema transaccional</h1>
-        <p class="sub">Acceso para laboratoristas, médicos y administradores.</p>
-        @if (error()) { <div class="alerta error">{{ error() }}</div> }
-        <div class="campo">
-          <label for="email">Correo</label>
-          <input id="email" name="email" type="email" autocomplete="username" required [(ngModel)]="email" />
-        </div>
-        <div class="campo">
-          <label for="clave">Contraseña</label>
-          <input id="clave" name="clave" type="password" autocomplete="current-password" required [(ngModel)]="password" />
-        </div>
-        <button type="submit" [disabled]="cargando() || !email || !password">
-          {{ cargando() ? 'Ingresando…' : 'Ingresar' }}
-        </button>
-        <p class="muted pie">¿Es paciente? <button type="button" class="secundario chico" (click)="irPortal()">Ir al portal de pacientes</button></p>
-      </form>
-    </div>
-  `,
-  styles: `
-    .fondo { min-height: 100vh; display: grid; place-items: center; padding: 16px;
-             background: linear-gradient(160deg, var(--verde-oscuro), var(--verde) 60%, #2f8f6f); }
-    .caja { width: min(400px, 100%); padding: 28px; }
-    .marca { color: var(--verde); font-weight: 700; margin-bottom: 14px; font-size: 15px; }
-    .marca span { font-size: 22px; }
-    button { width: 100%; justify-content: center; margin-top: 6px; }
-    .pie { margin: 16px 0 0; font-size: 13px; text-align: center; }
-  `,
+  template: `<p class="redirigiendo">Redirigiendo al inicio de sesión…</p>`,
+  styles: `.redirigiendo { padding: 32px; text-align: center; color: var(--gris); }`,
 })
-export class Login {
-  private readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
-  protected email = '';
-  protected password = '';
-  protected readonly cargando = signal(false);
-  protected readonly error = signal('');
-
-  irPortal() {
-    window.location.href = '/';
-  }
-
-  async entrar() {
-    this.cargando.set(true);
-    this.error.set('');
-    try {
-      await this.auth.login(this.email.trim().toLowerCase(), this.password);
-      this.router.navigateByUrl('/inicio');
-    } catch (e) {
-      this.error.set(mensajeError(e));
-    } finally {
-      this.cargando.set(false);
-    }
+export class Login implements OnInit {
+  ngOnInit() {
+    window.location.replace(URL_LOGIN);
   }
 }

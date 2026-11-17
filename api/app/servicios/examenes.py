@@ -4,7 +4,7 @@ import logging
 
 from flask import Blueprint, Response, jsonify, request
 
-from .. import config, db
+from .. import config, db, factura
 from ..errores import ApiError, no_encontrado, prohibido
 from ..paginacion import donde, listar, rango_fechas
 from ..pdf import pdf_resultados
@@ -113,6 +113,16 @@ def buscar_solicitudes():
     return listar(SQL_SOLICITUDES + donde(condiciones), params, "ORDER BY s.solicitud_id DESC")
 
 
+def nivel(v: dict) -> str:
+    """ALTO / BAJO según el rango numérico; ANORMAL si es texto fuera de rango; si no, NORMAL."""
+    n, minimo, maximo = v["valor_numerico"], v["valor_ref_min"], v["valor_ref_max"]
+    if n is not None and maximo is not None and n > maximo:
+        return "ALTO"
+    if n is not None and minimo is not None and n < minimo:
+        return "BAJO"
+    return "ANORMAL" if v["fuera_rango"] else "NORMAL"
+
+
 def obtener_solicitud(solicitud_id: int, codigo: str | None = None) -> dict:
     """Solicitud completa: cabecera, exámenes, resultados, valores y observaciones."""
     s = db.leer_uno(SQL_SOLICITUDES + (" WHERE s.codigo = ?" if codigo else " WHERE s.solicitud_id = ?"),
@@ -145,11 +155,15 @@ def obtener_solicitud(solicitud_id: int, codigo: str | None = None) -> dict:
         JOIN {e}.resultado r ON r.resultado_id = o.resultado_id
         JOIN {e}.solicitud_detalle d ON d.detalle_id = r.detalle_id
         WHERE d.solicitud_id = ? ORDER BY o.created_at""", s["solicitud_id"])
+    for x in valores:
+        x["nivel"] = nivel(x)
     for d in detalles:
         d["valores"] = [{k: v for k, v in x.items() if k != "resultado_id"}
                         for x in valores if d["resultado_id"] and x["resultado_id"] == d["resultado_id"]]
         d["observaciones_medicas"] = [o for o in observaciones if d["resultado_id"] and o["resultado_id"] == d["resultado_id"]]
     s["examenes"] = detalles
+    # Resumen del cobro: los precios incluyen IVA; se muestra separado al final.
+    s.update(factura.desglose([d["precio_unitario"] for d in detalles if d["estado"] != "ANULADO"]))
     return s
 
 

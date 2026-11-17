@@ -4,13 +4,15 @@ Las operaciones de negocio solo ENCOLAN el correo. Un hilo lo envía con
 Mailjet y registra el resultado. Puede correr en varias instancias a la
 vez: cada una toma filas distintas gracias a UPDLOCK + READPAST.
 """
+import base64
 import html
 import logging
+import re
 import threading
 import time
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from .. import config, db
 from ..errores import ApiError
@@ -34,10 +36,44 @@ def encolar(persona_id: int, tipo: str, asunto: str, mensaje: str):
         log.warning('{"evento":"notificacion_no_encolada","tipo":"%s","error":"%s"}', tipo, e.mensaje)
 
 
-def enviar_mailjet(destinatario: str, asunto: str, mensaje: str) -> str:
+_CODIGO_SOLICITUD = re.compile(r"SOL-\d{4}-\d{6}")
+
+
+def adjuntos_para(tipo: str, asunto: str) -> list[dict]:
+    """Documentos que acompañan al correo, generados al momento del envío.
+
+    PAGO_APROBADO lleva la factura (PDF y XML); RESULTADO_LISTO, el informe de
+    resultados en PDF. El código de la solicitud viene en el asunto, que lo
+    arman los procedimientos almacenados con un formato fijo.
+    """
+    if tipo not in ("PAGO_APROBADO", "RESULTADO_LISTO"):
+        return []
+    codigo = _CODIGO_SOLICITUD.search(asunto)
+    if not codigo:
+        return []
+    from .. import factura
+    from ..pdf import pdf_factura, pdf_resultados
+    from .examenes import obtener_solicitud
+
+    s = obtener_solicitud(0, codigo.group())
+    if tipo == "RESULTADO_LISTO":
+        return [_adjunto("application/pdf", f"resultados-{s['codigo']}.pdf", pdf_resultados(s))]
+    f = factura.datos(s["solicitud_id"])
+    return [_adjunto("application/pdf", f"factura-{f['numero']}.pdf", pdf_factura(f)),
+            _adjunto("application/xml", f"factura-{f['numero']}.xml", factura.xml(f))]
+
+
+def _adjunto(tipo: str, nombre: str, contenido: bytes) -> dict:
+    return {"ContentType": tipo, "Filename": nombre, "Base64Content": base64.b64encode(contenido).decode()}
+
+
+def enviar_mailjet(destinatario: str, asunto: str, mensaje: str, adjuntos: list[dict] | None = None) -> str:
     """Envía un correo con la API v3.1 de Mailjet y devuelve su MessageID."""
     if not (config.MAILJET_API_KEY and config.MAILJET_API_SECRET and config.MAIL_REMITENTE):
         raise RuntimeError("Mailjet no está configurado")
+    if adjuntos:
+        nombres = ", ".join(a["Filename"] for a in adjuntos)
+        mensaje = f"{mensaje} Adjuntamos: {nombres}."
     cuerpo_html = (
         "<div style='font-family:Arial,sans-serif;max-width:560px'>"
         "<h2 style='color:#0b6e4f'>Laboratorio Clínico</h2>"
@@ -51,8 +87,9 @@ def enviar_mailjet(destinatario: str, asunto: str, mensaje: str) -> str:
             "From": {"Email": config.MAIL_REMITENTE, "Name": config.MAIL_REMITENTE_NOMBRE},
             "To": [{"Email": destinatario}],
             "Subject": asunto, "TextPart": mensaje, "HTMLPart": cuerpo_html,
+            **({"Attachments": adjuntos} if adjuntos else {}),
         }]},
-        timeout=10,
+        timeout=20,
     )
     datos = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
     mensajes = datos.get("Messages") or [{}]
@@ -61,7 +98,17 @@ def enviar_mailjet(destinatario: str, asunto: str, mensaje: str) -> str:
     return str(mensajes[0]["To"][0]["MessageID"])
 
 
-def procesar_pendientes(limite: int = 10) -> dict:
+def _generar_adjuntos(app, tipo: str, asunto: str) -> list[dict]:
+    """Si los documentos no se pueden generar, el correo sale igual, sin adjuntos."""
+    try:
+        with app.app_context():
+            return adjuntos_para(tipo, asunto)
+    except Exception as e:
+        log.warning('{"evento":"adjuntos_no_generados","tipo":"%s","error":"%s"}', tipo, str(e).replace('"', "'")[:200])
+        return []
+
+
+def procesar_pendientes(app, limite: int = 10) -> dict:
     """Envía hasta `limite` correos pendientes. Seguro con varias instancias."""
     enviados = fallidos = 0
     cn = db.nueva_conexion_azure()
@@ -69,14 +116,14 @@ def procesar_pendientes(limite: int = 10) -> dict:
         cn.autocommit = False
         cur = cn.cursor()
         filas = cur.execute("""
-            SELECT TOP (?) notificacion_id, destinatario, asunto, cuerpo, intentos
+            SELECT TOP (?) notificacion_id, tipo, destinatario, asunto, cuerpo, intentos
             FROM dbo.notificacion WITH (UPDLOCK, READPAST, ROWLOCK)
             WHERE estado = 'PENDIENTE' AND intentos < ?
             ORDER BY notificacion_id
         """, limite, MAX_INTENTOS).fetchall()
-        for n_id, destino, asunto, mensaje, intentos in filas:
+        for n_id, tipo, destino, asunto, mensaje, intentos in filas:
             try:
-                msg_id = enviar_mailjet(destino, asunto, mensaje)
+                msg_id = enviar_mailjet(destino, asunto, mensaje, _generar_adjuntos(app, tipo, asunto))
                 cur.execute("UPDATE dbo.notificacion SET estado = 'ENVIADA', intentos = intentos + 1, proveedor_msg_id = ?, "
                             "enviada_at = SYSUTCDATETIME(), ultimo_error = NULL, updated_at = SYSUTCDATETIME() "
                             "WHERE notificacion_id = ?", msg_id, n_id)
@@ -95,12 +142,12 @@ def procesar_pendientes(limite: int = 10) -> dict:
     return {"enviadas": enviados, "fallidas": fallidos}
 
 
-def iniciar_notificador():
+def iniciar_notificador(app):
     def bucle():
         while True:
             try:
                 if db.azure_disponible():
-                    procesar_pendientes()
+                    procesar_pendientes(app)
             except Exception as e:
                 log.warning('{"evento":"notificador_error","error":"%s"}', str(e).replace('"', "'")[:200])
             time.sleep(config.NOTIFICADOR_INTERVALO)
@@ -130,7 +177,7 @@ def listar():
 @bp.post("/procesar")
 @requiere("ADMIN")
 def procesar():
-    return jsonify(procesar_pendientes(50))
+    return jsonify(procesar_pendientes(current_app._get_current_object(), 50))
 
 
 @bp.post("/prueba")

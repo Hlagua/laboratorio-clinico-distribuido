@@ -19,8 +19,14 @@ class ApiError implements Exception {
 }
 
 /// Sesión del paciente: token JWT y datos básicos, guardados en sessionStorage.
+///
+/// El login es uno solo para todos (/ingresar). Si la persona entra con un rol
+/// del personal, la sesión se deja en la clave que lee el sistema del personal
+/// (Angular, /admin), que comparte el mismo origen y por tanto el sessionStorage.
 class Sesion extends ChangeNotifier {
   static const _clave = 'portal-sesion';
+  static const _claveAdmin = 'lab-admin-sesion';
+  static const rolesPersonal = ['LABORATORISTA', 'MEDICO', 'ADMIN'];
   String? token;
   Map<String, dynamic>? usuario;
 
@@ -38,6 +44,7 @@ class Sesion extends ChangeNotifier {
 
   bool get autenticado => token != null;
   String get nombre => (usuario?['nombre'] as String?) ?? '';
+  List<String> get roles => ((usuario?['roles'] as List?) ?? const []).cast<String>();
 
   void iniciar(String t, Map<String, dynamic> u) {
     token = t;
@@ -46,10 +53,18 @@ class Sesion extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Entra al sistema del personal con el rol elegido.
+  void irAlPersonal(String t, Map<String, dynamic> u, String rol) {
+    if ((u['roles'] as List).contains('PACIENTE')) iniciar(t, u); // para volver al portal sin otro login
+    web.window.sessionStorage.setItem(_claveAdmin, jsonEncode({'token': t, 'usuario': u, 'rolActivo': rol}));
+    web.window.location.href = '/admin/inicio';
+  }
+
   void cerrar() {
     token = null;
     usuario = null;
     web.window.sessionStorage.removeItem(_clave);
+    web.window.sessionStorage.removeItem(_claveAdmin);
     notifyListeners();
   }
 
@@ -104,15 +119,25 @@ class Api {
     return cuerpo;
   }
 
-  /// Descarga el PDF de resultados con el token y lo abre en otra pestaña.
-  Future<void> abrirPdf(String ruta) async {
+  /// Descarga un documento con el token. Sin nombre se abre en otra pestaña
+  /// (PDF); con nombre se guarda como archivo (XML de la factura).
+  Future<void> abrirPdf(String ruta) => abrirArchivo(ruta, 'application/pdf');
+
+  Future<void> abrirArchivo(String ruta, String tipo, {String? nombre}) async {
     final r = await http.get(_uri(ruta), headers: _cabeceras);
     if (r.statusCode != 200) {
       final d = jsonDecode(utf8.decode(r.bodyBytes));
-      throw ApiError((d['error'] as String?) ?? 'No se pudo generar el PDF', r.statusCode);
+      throw ApiError((d['error'] as String?) ?? 'No se pudo generar el documento', r.statusCode);
     }
-    final blob = web.Blob([Uint8List.fromList(r.bodyBytes).toJS].toJS, web.BlobPropertyBag(type: 'application/pdf'));
-    web.window.open(web.URL.createObjectURL(blob), '_blank');
+    final url = web.URL.createObjectURL(web.Blob([Uint8List.fromList(r.bodyBytes).toJS].toJS, web.BlobPropertyBag(type: tipo)));
+    if (nombre == null) {
+      web.window.open(url, '_blank');
+    } else {
+      (web.document.createElement('a') as web.HTMLAnchorElement)
+        ..href = url
+        ..download = nombre
+        ..click();
+    }
   }
 
   /// Redirige el navegador (Stripe Checkout).

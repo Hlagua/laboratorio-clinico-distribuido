@@ -1,14 +1,15 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
 import { claseEstado, hora, hoyIso, textoEstado } from '../core/formato';
 import { Cita } from '../core/modelos';
+import { paginarLocal, Paginador } from '../core/paginador';
 
 @Component({
   selector: 'app-agenda',
-  imports: [FormsModule],
+  imports: [FormsModule, Paginador],
   template: `
     <div class="entre">
       <div><h1>Agenda del día</h1>
@@ -22,10 +23,11 @@ import { Cita } from '../core/modelos';
     @if (error()) { <div class="alerta error">{{ error() }}</div> }
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
     <div class="card tabla-scroll">
+      <div class="buscador"><input type="search" placeholder="Buscar por paciente, cédula, solicitud o examen" [ngModel]="q()" (ngModelChange)="q.set($event); pag.set(1)" /></div>
       <table>
         <thead><tr><th>Hora</th><th>Paciente</th><th>Cédula</th><th>Exámenes</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
         <tbody>
-          @for (c of citas(); track c.cita_id) {
+          @for (c of vista().items; track c.cita_id) {
             <tr>
               <td><strong>{{ hora(c.hora_inicio) }}</strong>–{{ hora(c.hora_fin) }}</td>
               <td>{{ c.paciente }}</td><td>{{ c.cedula }}</td>
@@ -47,6 +49,7 @@ import { Cita } from '../core/modelos';
           }
         </tbody>
       </table>
+      <app-paginador [pagina]="vista()" (cambiar)="pag.set($event)" />
     </div>
   `,
   styles: `.acciones { white-space: nowrap; } .acciones button { margin: 2px; }`,
@@ -60,6 +63,10 @@ export class Agenda implements OnInit {
   protected readonly hora = hora;
   protected fecha = hoyIso();
   protected readonly citas = signal<Cita[]>([]);
+  protected readonly q = signal('');
+  protected readonly pag = signal(1);
+  protected readonly vista = computed(() => paginarLocal(this.citas(), this.pag(), this.q(),
+    (c) => `${c.paciente} ${c.cedula} ${c.solicitud_codigo ?? ''} ${c.examenes_resumen ?? ''} ${c.motivo ?? ''}`));
   protected readonly cargando = signal(false);
   protected readonly error = signal('');
   protected readonly aviso = signal('');

@@ -104,6 +104,6 @@ def create_app() -> Flask:
                        modo="normal" if db.azure_disponible() else "contingencia")
 
     if config.NOTIFICADOR_ACTIVO:
-        notificaciones.iniciar_notificador()
+        notificaciones.iniciar_notificador(app)
 
     return app

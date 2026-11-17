@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart';
 import '../comun.dart';
 import '../main.dart';
 import 'citas.dart';
@@ -33,6 +34,12 @@ class _PanelState extends State<Panel> {
         foregroundColor: Colors.white,
         title: Text('Hola, ${sesion.nombre.split(' ').first}'),
         actions: [
+          if (sesion.roles.any(Sesion.rolesPersonal.contains))
+            TextButton.icon(
+              onPressed: _cambiarRol,
+              icon: const Icon(Icons.swap_horiz, color: Colors.white),
+              label: const Text('Cambiar de rol', style: TextStyle(color: Colors.white)),
+            ),
           IconButton(tooltip: 'Actualizar', onPressed: _recargar, icon: const Icon(Icons.refresh)),
           TextButton(
             onPressed: () {
@@ -77,6 +84,13 @@ class _PanelState extends State<Panel> {
         ],
       ),
     );
+  }
+
+  /// Pasa al sistema del personal con otro de sus roles, sin volver a ingresar.
+  Future<void> _cambiarRol() async {
+    final roles = ['PACIENTE', ...sesion.roles.where(Sesion.rolesPersonal.contains)];
+    final rol = await elegirRol(context, roles, actual: 'PACIENTE');
+    if (rol != null && rol != 'PACIENTE') sesion.irAlPersonal(sesion.token!, sesion.usuario!, rol);
   }
 
   /// Una cita es el turno para la toma de muestras. Queda "pendiente de pago" hasta que
@@ -213,7 +227,7 @@ class _PanelState extends State<Panel> {
       );
 }
 
-/// Lista genérica que carga una ruta de la API.
+/// Lista genérica que carga una ruta de la API, con buscador y páginas de 10.
 class _Lista extends StatefulWidget {
   const _Lista({super.key, required this.ruta, required this.vacio, required this.item});
   final String ruta;
@@ -225,19 +239,58 @@ class _Lista extends StatefulWidget {
 }
 
 class _ListaState extends State<_Lista> {
+  static const porPagina = 10;
   late Future<List<dynamic>> _datos = _cargar();
+  final _buscar = TextEditingController();
+  int _pagina = 0;
 
   Future<List<dynamic>> _cargar() async => await api.get(widget.ruta) as List<dynamic>;
+
+  /// Texto en el que se busca: todos los valores del elemento (código, exámenes, fechas, estado…).
+  static String _texto(Map<String, dynamic> x) => x.values.where((v) => v != null).join(' ').toLowerCase();
+
+  @override
+  void dispose() {
+    _buscar.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Cargando<List<dynamic>>(
         futuro: _datos,
         reintentar: () => setState(() => _datos = _cargar()),
-        constructor: (lista) => lista.isEmpty
-            ? Center(child: Text(widget.vacio, style: const TextStyle(color: Colors.grey)))
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                children: [for (final x in lista) widget.item(x as Map<String, dynamic>)],
-              ),
+        constructor: (lista) {
+          if (lista.isEmpty) return Center(child: Text(widget.vacio, style: const TextStyle(color: Colors.grey)));
+          final q = _buscar.text.trim().toLowerCase();
+          final filtrados = lista.cast<Map<String, dynamic>>().where((x) => q.isEmpty || _texto(x).contains(q)).toList();
+          final paginas = (filtrados.length / porPagina).ceil().clamp(1, 1 << 30);
+          final pagina = _pagina.clamp(0, paginas - 1);
+          final visibles = filtrados.skip(pagina * porPagina).take(porPagina);
+          return ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 90), children: [
+            TextField(
+              controller: _buscar,
+              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar por código, examen, fecha o estado'),
+              onChanged: (_) => setState(() => _pagina = 0),
+            ),
+            const SizedBox(height: 8),
+            if (filtrados.isEmpty)
+              const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Nada coincide con la búsqueda.')))
+            else
+              for (final x in visibles) widget.item(x),
+            if (filtrados.length > porPagina)
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                IconButton(
+                    tooltip: 'Anterior',
+                    onPressed: pagina > 0 ? () => setState(() => _pagina = pagina - 1) : null,
+                    icon: const Icon(Icons.chevron_left)),
+                Text('${pagina * porPagina + 1}–${(pagina * porPagina + porPagina).clamp(0, filtrados.length)} '
+                    'de ${filtrados.length} · página ${pagina + 1} de $paginas'),
+                IconButton(
+                    tooltip: 'Siguiente',
+                    onPressed: pagina < paginas - 1 ? () => setState(() => _pagina = pagina + 1) : null,
+                    icon: const Icon(Icons.chevron_right)),
+              ]),
+          ]);
+        },
       );
 }

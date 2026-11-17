@@ -34,7 +34,7 @@ class PortalPacientes extends StatelessWidget {
       onGenerateRoute: (ajustes) {
         final uri = Uri.parse(ajustes.name ?? '/');
         final Widget pantalla = switch (uri.path) {
-          '/ingresar' => const Acceso(registro: false),
+          '/ingresar' || '/login' => const Acceso(registro: false),
           '/registro' => const Acceso(registro: true),
           '/panel' => sesion.autenticado ? const Panel() : const Acceso(registro: false),
           '/pagos/resultado' => PagoResultado(parametros: uri.queryParameters),

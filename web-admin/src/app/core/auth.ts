@@ -27,6 +27,10 @@ export const NOMBRE_ROL: Record<Rol, string> = {
 };
 
 const CLAVE = 'lab-admin-sesion';
+/** Sesión del portal de pacientes (Flutter). Mismo origen, mismo sessionStorage. */
+const CLAVE_PORTAL = 'portal-sesion';
+/** Login único de la plataforma (portal Flutter): todos los roles ingresan ahí. */
+export const URL_LOGIN = '/ingresar';
 
 /**
  * Sesión del personal. Una persona puede tener varios roles: el rol activo
@@ -42,6 +46,9 @@ export class AuthService {
   readonly rolActivo = signal<Rol | null>(null);
 
   readonly rolesPersonal = computed(() => (this.usuario()?.roles ?? []).filter((r) => ROLES_PERSONAL.includes(r)));
+  /** Roles a los que se puede cambiar sin volver a ingresar (incluye el de paciente). */
+  readonly rolesDisponibles = computed(() =>
+    (this.usuario()?.roles ?? []).filter((r) => ROLES_PERSONAL.includes(r) || r === 'PACIENTE'));
   readonly autenticado = computed(() => !!this.token() && !!this.rolActivo());
 
   constructor() {
@@ -73,6 +80,16 @@ export class AuthService {
   }
 
   cambiarRol(rol: Rol): void {
+    if (rol === 'PACIENTE' && this.usuario()?.roles.includes(rol)) {
+      // El paciente usa el portal Flutter: se le pasa la sesión y se navega allá.
+      try {
+        sessionStorage.setItem(CLAVE_PORTAL, JSON.stringify({ token: this.token(), usuario: this.usuario() }));
+      } catch {
+        /* sin almacenamiento: tendrá que ingresar de nuevo */
+      }
+      window.location.href = '/panel';
+      return;
+    }
     if (this.usuario()?.roles.includes(rol)) {
       this.rolActivo.set(rol);
       this.guardar();
@@ -91,10 +108,11 @@ export class AuthService {
     this.rolActivo.set(null);
     try {
       sessionStorage.removeItem(CLAVE);
+      sessionStorage.removeItem(CLAVE_PORTAL);
     } catch {
       /* sin almacenamiento */
     }
-    this.router.navigateByUrl('/login');
+    window.location.href = URL_LOGIN;
   }
 
   private guardar(): void {

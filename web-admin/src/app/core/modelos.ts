@@ -64,6 +64,8 @@ export interface ValorResultado {
   valor_ref_max: number | null;
   valor_ref_texto: string | null;
   fuera_rango: boolean;
+  /** ALTO / BAJO / NORMAL frente al rango; ANORMAL si es texto fuera de rango. */
+  nivel?: 'ALTO' | 'BAJO' | 'NORMAL' | 'ANORMAL';
 }
 
 export interface ObservacionMedica {
@@ -89,6 +91,9 @@ export interface ExamenSolicitado {
 }
 
 export interface Solicitud extends SolicitudResumen {
+  subtotal: number;
+  iva: number;
+  iva_porcentaje: number;
   observaciones: string | null;
   cita_id: number | null;
   examenes: ExamenSolicitado[];

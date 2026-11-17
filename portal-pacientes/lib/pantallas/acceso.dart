@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart';
 import '../comun.dart';
 import '../main.dart';
 
-/// Inicio de sesión y registro de pacientes.
+/// Login único de la plataforma y registro de pacientes.
+///
+/// Todos ingresan aquí. Según el rol se va al portal del paciente o al sistema
+/// del personal (/admin); con varios roles se pregunta con cuál entrar.
+/// Solo los pacientes pueden crear su cuenta: al personal lo crea el administrador.
 class Acceso extends StatefulWidget {
   const Acceso({super.key, required this.registro});
   final bool registro;
@@ -40,11 +45,17 @@ class _AccesoState extends State<Acceso> {
       }
       final r = await api.post('/api/auth/login', {'email': email, 'password': _c['password']!.text}) as Map<String, dynamic>;
       final usuario = r['usuario'] as Map<String, dynamic>;
-      if (!(usuario['roles'] as List).contains('PACIENTE')) {
-        throw Exception('Su usuario no tiene perfil de paciente. El personal usa el sistema transaccional (/admin).');
+      final roles = (usuario['roles'] as List).cast<String>()
+          .where((x) => x == 'PACIENTE' || Sesion.rolesPersonal.contains(x)).toList();
+      if (!mounted) return;
+      final rol = await elegirRol(context, roles);
+      if (rol == null) return; // cerró el diálogo sin elegir
+      if (rol == 'PACIENTE') {
+        sesion.iniciar(r['token'] as String, usuario);
+        if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/panel', (_) => false);
+      } else {
+        sesion.irAlPersonal(r['token'] as String, usuario, rol);
       }
-      sesion.iniciar(r['token'] as String, usuario);
-      if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/panel', (_) => false);
     } catch (e) {
       if (mounted) mostrarMensaje(context, '$e', error: true);
     } finally {
@@ -83,7 +94,14 @@ class _AccesoState extends State<Acceso> {
                 key: _form,
                 child: AutofillGroup(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    Text(reg ? 'Regístrese como paciente' : 'Bienvenido de nuevo', style: Theme.of(context).textTheme.titleLarge),
+                    Text(reg ? 'Regístrese como paciente' : 'Bienvenido', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 4),
+                    Text(
+                      reg
+                          ? 'Las cuentas de médicos, laboratoristas y administradores las crea el administrador del laboratorio.'
+                          : 'Un solo acceso para pacientes y personal del laboratorio. Si tiene varios roles, elegirá con cuál entrar.',
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
                     const SizedBox(height: 16),
                     if (reg) ...[
                       TextFormField(controller: _c['cedula'], decoration: const InputDecoration(labelText: 'Cédula'),
@@ -154,7 +172,7 @@ class _AccesoState extends State<Acceso> {
                     ),
                     TextButton(
                       onPressed: () => Navigator.pushReplacementNamed(context, reg ? '/ingresar' : '/registro'),
-                      child: Text(reg ? '¿Ya tiene cuenta? Ingrese' : '¿No tiene cuenta? Regístrese'),
+                      child: Text(reg ? '¿Ya tiene cuenta? Ingrese' : '¿Es paciente y no tiene cuenta? Regístrese'),
                     ),
                   ]),
                 ),

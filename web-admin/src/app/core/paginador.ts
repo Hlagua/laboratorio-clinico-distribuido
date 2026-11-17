@@ -9,10 +9,25 @@ export interface Pagina<T> {
   paginas: number;
 }
 
-export const POR_PAGINA = 20;
+export const POR_PAGINA = 10;
 
 export function paginaVacia<T>(): Pagina<T> {
   return { items: [], total: 0, pagina: 1, por_pagina: POR_PAGINA, paginas: 1 };
+}
+
+/**
+ * Pagina en el navegador una lista que ya está cargada (catálogo, reglas, agenda…),
+ * filtrándola antes por el texto buscado.
+ */
+export function paginarLocal<T>(lista: T[], pagina: number, q = '', texto: (x: T) => string = (x) => JSON.stringify(x)): Pagina<T> {
+  const buscado = q.trim().toLowerCase();
+  const filtrados = buscado ? lista.filter((x) => texto(x).toLowerCase().includes(buscado)) : lista;
+  const paginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
+  const actual = Math.min(Math.max(1, pagina), paginas);
+  return {
+    items: filtrados.slice((actual - 1) * POR_PAGINA, actual * POR_PAGINA),
+    total: filtrados.length, pagina: actual, por_pagina: POR_PAGINA, paginas,
+  };
 }
 
 /** Controles "Anterior / Siguiente" con el resumen "21–40 de 135". */

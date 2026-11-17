@@ -52,6 +52,14 @@ PERMITIR_PRUEBA_CONCURRENCIA = _bool("PERMITIR_PRUEBA_CONCURRENCIA")
 # Datos ficticios de la cuenta para pagos por transferencia con QR.
 CUENTA_TRANSFERENCIA = os.getenv("CUENTA_TRANSFERENCIA", "Banco Ficticio · Cta. Corriente 2200000000 · Laboratorio Clínico S.A.")
 
+# Facturación. Los precios del catálogo ya incluyen el IVA; la factura lo desglosa.
+# Emisor ficticio: el XML sigue la estructura de la factura electrónica del SRI
+# (versión 1.1.0, ambiente de pruebas) pero no se firma ni se envía al SRI.
+IVA_PORCENTAJE = int(os.getenv("IVA_PORCENTAJE", "15"))
+FACTURA_RUC = os.getenv("FACTURA_RUC", "1891234567001")
+FACTURA_RAZON_SOCIAL = os.getenv("FACTURA_RAZON_SOCIAL", "LABORATORIO CLINICO UTA S.A.")
+FACTURA_DIRECCION = os.getenv("FACTURA_DIRECCION", "Av. Los Chasquis y Río Payamino, Ambato, Ecuador")
+
 
 def validar():
     faltan = [n for n in ("AZURE_SQL_CONN", "SUPABASE_DSN", "JWT_SECRETO") if not globals()[n]]

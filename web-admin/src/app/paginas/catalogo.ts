@@ -1,14 +1,15 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, mensajeError } from '../core/api';
 import { dinero, hoyIso, rango } from '../core/formato';
 import { TipoExamen } from '../core/modelos';
+import { paginarLocal, Paginador } from '../core/paginador';
 
 interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | null; valor_ref_max: number | null; valor_ref_texto: string }
 
 @Component({
   selector: 'app-catalogo',
-  imports: [FormsModule],
+  imports: [FormsModule, Paginador],
   template: `
     <h1>Catálogo y franjas</h1>
     <p class="sub">Exámenes ofrecidos y horarios de atención.</p>
@@ -16,10 +17,11 @@ interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | n
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
 
     <div class="card tabla-scroll">
+      <div class="buscador"><input type="search" placeholder="Buscar por código, examen, categoría o muestra" [ngModel]="q()" (ngModelChange)="q.set($event); pag.set(1)" /></div>
       <table>
         <thead><tr><th>Código</th><th>Examen</th><th>Categoría</th><th>Muestra</th><th class="num">Precio</th><th>Parámetros (referencia)</th></tr></thead>
         <tbody>
-          @for (t of catalogo(); track t.tipo_examen_id) {
+          @for (t of vista().items; track t.tipo_examen_id) {
             <tr>
               <td>{{ t.codigo }}</td>
               <td><strong>{{ t.nombre }}</strong>@if (t.requiere_ayuno) { <span class="badge ambar">ayuno</span> }</td>
@@ -28,9 +30,10 @@ interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | n
                 {{ p.nombre }} ({{ rango(p.valor_ref_min, p.valor_ref_max, p.valor_ref_texto) }} {{ p.unidad }})@if (!$last) {, }
               }</small></td>
             </tr>
-          }
+          } @empty { <tr><td colspan="6" class="vacio">Ningún examen coincide.</td></tr> }
         </tbody>
       </table>
+      <app-paginador [pagina]="vista()" (cambiar)="pag.set($event)" />
     </div>
 
     <div class="grid dos">
@@ -90,6 +93,10 @@ export class Catalogo implements OnInit {
   protected readonly rango = rango;
   protected readonly catalogo = signal<TipoExamen[]>([]);
   protected readonly categorias = signal<string[]>([]);
+  protected readonly q = signal('');
+  protected readonly pag = signal(1);
+  protected readonly vista = computed(() =>
+    paginarLocal(this.catalogo(), this.pag(), this.q(), (t) => `${t.codigo} ${t.nombre} ${t.categoria} ${t.tipo_muestra}`));
   protected readonly error = signal('');
   protected readonly aviso = signal('');
   protected ex = this.examenVacio();

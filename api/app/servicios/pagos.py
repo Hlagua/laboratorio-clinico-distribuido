@@ -14,11 +14,12 @@ from decimal import Decimal
 
 import segno
 import stripe
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
-from .. import config, db
+from .. import config, db, factura
 from ..errores import ApiError, no_encontrado, prohibido
 from ..paginacion import donde, listar as listar_paginado, rango_fechas
+from ..pdf import pdf_factura
 from ..seguridad import perfil, requiere, rol_actual, usuario_actual
 from ..validacion import cuerpo, decimal, entero, texto
 from .notificaciones import encolar
@@ -82,6 +83,20 @@ def checkout():
     pago_id = db.ejecutar_sp("sp_crear_pago", "pago_id", solicitud_id=s["solicitud_id"], metodo="STRIPE",
                              stripe_checkout_session_id=sesion.id, usuario_id=usuario_actual()["usuario_id"])
     return jsonify(pago_id=pago_id, checkout_url=sesion.url, session_id=sesion.id, monto=s["total"]), 201
+
+
+@bp.get("/factura/<int:solicitud_id>")
+@requiere("PACIENTE", "ADMIN")
+def descargar_factura(solicitud_id: int):
+    """Factura de una solicitud pagada: ?formato=pdf (por defecto) o ?formato=xml."""
+    f = factura.datos(solicitud_id)
+    if rol_actual() == "PACIENTE" and f["solicitud"]["paciente_id"] != perfil("paciente_id"):
+        raise prohibido("Solo puede descargar sus propias facturas.")
+    if request.args.get("formato", "pdf").lower() == "xml":
+        return Response(factura.xml(f), mimetype="application/xml",
+                        headers={"Content-Disposition": f'attachment; filename="factura-{f["numero"]}.xml"'})
+    return Response(pdf_factura(f), mimetype="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="factura-{f["numero"]}.pdf"'})
 
 
 @bp.post("/transferencia")

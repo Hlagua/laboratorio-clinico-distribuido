@@ -6,6 +6,40 @@ const verdeOscuro = Color(0xFF08513A);
 const rojo = Color(0xFFB00020);
 const ambar = Color(0xFF9A6700);
 
+/// Cada rol tiene su color para no confundir en qué portal se está trabajando.
+/// Deben coincidir con los de web-admin/src/styles.css (.rol-*).
+const coloresRol = <String, (Color, Color)>{
+  'PACIENTE': (verde, verdeOscuro),
+  'MEDICO': (Color(0xFF1D5FA8), Color(0xFF143F73)),
+  'LABORATORISTA': (Color(0xFF6A3FA0), Color(0xFF4A2A73)),
+  'ADMIN': (Color(0xFF37474F), Color(0xFF232E33)),
+};
+const nombresRol = {'PACIENTE': 'Paciente', 'MEDICO': 'Médico tratante', 'LABORATORISTA': 'Laboratorista', 'ADMIN': 'Administrador'};
+const iconosRol = {'PACIENTE': Icons.person, 'MEDICO': Icons.medical_services, 'LABORATORISTA': Icons.biotech, 'ADMIN': Icons.admin_panel_settings};
+
+/// Pide el rol con el que se quiere trabajar (solo si la persona tiene más de uno).
+Future<String?> elegirRol(BuildContext context, List<String> roles, {String? actual}) {
+  if (roles.length == 1) return Future.value(roles.first);
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: Text(actual == null ? '¿Con qué rol desea ingresar?' : 'Cambiar de rol'),
+      children: [
+        for (final r in roles)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, r),
+            child: Row(children: [
+              CircleAvatar(backgroundColor: coloresRol[r]!.$1, foregroundColor: Colors.white, child: Icon(iconosRol[r])),
+              const SizedBox(width: 14),
+              Expanded(child: Text(nombresRol[r] ?? r, style: const TextStyle(fontSize: 16))),
+              if (r == actual) const Text('actual', style: TextStyle(color: Colors.grey)),
+            ]),
+          ),
+      ],
+    ),
+  );
+}
+
 String dinero(dynamic v) => v == null ? '' : 'USD ${(v as num).toStringAsFixed(2)}';
 String hora(dynamic h) {
   final s = h as String? ?? '';

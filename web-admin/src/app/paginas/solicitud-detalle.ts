@@ -22,11 +22,19 @@ interface Captura { parametro: Parametro; valor: string }
         <div>
           <h1>{{ s.codigo }} <span [class]="claseEstado(s.estado)">{{ textoEstado(s.estado) }}</span></h1>
           <p class="sub">{{ s.paciente }} · CI {{ s.cedula }} · {{ fechaHora(s.created_at) }}
-            @if (s.medico_id) { · Ordenado por {{ s.medico }} } · Total {{ dinero(s.total) }}</p>
+            @if (s.medico_id) { · Ordenado por {{ s.medico }} }</p>
+          <p class="cobro">Subtotal {{ dinero(s.subtotal) }} · IVA {{ s.iva_porcentaje }} % {{ dinero(s.iva) }} ·
+            <strong>Total {{ dinero(s.total) }}</strong></p>
         </div>
-        @if (tieneResultados()) {
-          <button class="secundario" (click)="pdf()">Descargar PDF</button>
-        }
+        <div class="fila">
+          @if (tieneResultados()) {
+            <button class="secundario" (click)="pdf()">Resultados (PDF)</button>
+          }
+          @if (auth.tiene('ADMIN') && ['PAGADA', 'EN_PROCESO', 'COMPLETADA'].includes(s.estado)) {
+            <button class="secundario" (click)="factura('pdf')">Factura (PDF)</button>
+            <button class="secundario" (click)="factura('xml')">Factura (XML)</button>
+          }
+        </div>
       </div>
       @if (s.estado === 'REGISTRADA') {
         <div class="alerta aviso">La solicitud aún no está pagada: no se pueden registrar muestras ni resultados.</div>
@@ -48,13 +56,14 @@ interface Captura { parametro: Parametro; valor: string }
           @if (ex.resultado_id) {
             <div class="tabla-scroll">
               <table>
-                <thead><tr><th>Parámetro</th><th class="num">Resultado</th><th>Unidad</th><th>Referencia</th></tr></thead>
+                <thead><tr><th>Parámetro</th><th class="num">Resultado</th><th>Unidad</th><th>Referencia</th><th>Indicador</th></tr></thead>
                 <tbody>
                   @for (v of ex.valores; track v.parametro_id) {
                     <tr>
                       <td>{{ v.parametro }}</td>
-                      <td class="num" [class.fuera]="v.fuera_rango">{{ v.valor_texto ?? v.valor_numerico }}{{ v.fuera_rango ? ' ⚠' : '' }}</td>
+                      <td class="num" [class.fuera]="v.fuera_rango">{{ v.valor_texto ?? v.valor_numerico }}</td>
                       <td>{{ v.unidad }}</td><td>{{ rango(v.valor_ref_min, v.valor_ref_max, v.valor_ref_texto) }}</td>
+                      <td [class.fuera]="v.fuera_rango" class="indicador">{{ indicador(v.nivel) }}</td>
                     </tr>
                   }
                 </tbody>
@@ -112,6 +121,8 @@ interface Captura { parametro: Parametro; valor: string }
     .cabeza { margin-top: 12px; }
     h1 .badge { vertical-align: middle; margin-left: 8px; }
     .obs { background: var(--azul-suave); border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
+    .cobro { margin: -12px 0 16px; color: var(--gris); }
+    .indicador { white-space: nowrap; font-weight: 600; }
   `,
 })
 export class SolicitudDetalle implements OnInit {
@@ -192,6 +203,19 @@ export class SolicitudDetalle implements OnInit {
       resultado_id: ex.resultado_id, texto: this.observacion[ex.detalle_id].trim(),
     }), 'Observación registrada.');
     this.observacion[ex.detalle_id] = '';
+  }
+
+  protected indicador(nivel?: string): string {
+    return { ALTO: '↑ alto', BAJO: '↓ bajo', ANORMAL: 'fuera de rango' }[nivel ?? ''] ?? '– normal';
+  }
+
+  async factura(formato: 'pdf' | 'xml') {
+    try {
+      await this.api.abrirArchivo(`/api/pagos/factura/${this.id()}?formato=${formato}`,
+        formato === 'xml' ? `factura-${this.s()?.codigo}.xml` : undefined);
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    }
   }
 
   async pdf() {

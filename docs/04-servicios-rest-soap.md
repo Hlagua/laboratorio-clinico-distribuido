@@ -79,8 +79,8 @@ Para la **prueba de concurrencia (Fase VI)**, con `PERMITIR_PRUEBA_CONCURRENCIA=
 | POST | `/api/solicitudes` | PACIENTE, MEDICO, LABORATORISTA | | `{examenes: [ids], paciente_id?, cita_id?}` |
 | GET | `/api/solicitudes/mias` | PACIENTE | ✔ | Mis solicitudes |
 | GET | `/api/solicitudes?estado=&cedula=&codigo=&paciente=&desde=&hasta=&propias=1&pagina=` | LABORATORISTA, MEDICO, ADMIN | ✔ | Búsqueda paginada, con `examenes_resumen` |
-| GET | `/api/solicitudes/{id}` | dueño o personal | ✔ | Solicitud completa: exámenes, valores y observaciones |
-| GET | `/api/solicitudes/{id}/pdf` | dueño o personal | ✔ | **Informe PDF**, con los valores fuera de rango en rojo |
+| GET | `/api/solicitudes/{id}` | dueño o personal | ✔ | Solicitud completa: exámenes, valores con `nivel` (`ALTO`, `BAJO`, `NORMAL`, `ANORMAL`) y observaciones; además `subtotal`, `iva`, `iva_porcentaje` y `total` |
+| GET | `/api/solicitudes/{id}/pdf` | dueño o personal | ✔ | **Informe PDF**: valores fuera de rango en rojo e indicador ↑ alto, ↓ bajo, – normal |
 | POST | `/api/solicitudes/detalle/{id}/muestra` | LABORATORISTA | | Registra la toma de muestra |
 | POST | `/api/resultados` | LABORATORISTA | | `{detalle_id, valores: [{parametro_id, valor \| texto}], observaciones}` |
 
@@ -92,9 +92,17 @@ Para la **prueba de concurrencia (Fase VI)**, con `PERMITIR_PRUEBA_CONCURRENCIA=
 | POST | `/api/pagos/transferencia` | PACIENTE | | Transferencia simulada: referencia + **código QR** |
 | POST | `/api/pagos/{id}/confirmar-transferencia` | ADMIN | | `{aprobado, motivo}` |
 | POST | `/api/pagos/{id}/reembolso` | ADMIN | | `{monto, motivo}`: reembolso total o parcial en Stripe (con Idempotency-Key) |
+| GET | `/api/pagos/factura/{solicitud_id}?formato=pdf\|xml` | dueño o ADMIN | ✔ | **Factura** de una solicitud pagada (409 si no hay pago aprobado) |
 | GET | `/api/pagos/mios` | PACIENTE | ✔ | Mis pagos |
 | GET | `/api/pagos/{id}` | dueño o ADMIN | ✔ | Pago con sus reembolsos |
 | GET | `/api/pagos?estado=&metodo=&q=&desde=&hasta=&pagina=` | ADMIN | ✔ | Listado filtrado y paginado |
+
+**IVA y factura** (`api/app/factura.py`):
+- Los precios del catálogo **incluyen el IVA** (`IVA_PORCENTAJE`, 15 % por defecto). El resumen del pedido y la factura lo separan al final: subtotal sin IVA, IVA y total.
+- La base de cada examen se redondea al centavo y el IVA es la diferencia con el total, así la suma siempre cuadra.
+- El XML sigue la estructura de la factura electrónica del SRI: versión 1.1.0, ambiente de pruebas y clave de acceso de 49 dígitos con dígito verificador módulo 11. Es un comprobante académico: no se firma ni se envía al SRI.
+- Al aprobarse el pago, el correo `PAGO_APROBADO` lleva **la factura en PDF y XML**. Al completarse los resultados, el correo `RESULTADO_LISTO` lleva **el PDF de resultados**.
+- Los adjuntos se generan al enviar el correo. Si fallan, el correo sale igual, sin adjuntos, y queda un aviso en el log (`adjuntos_no_generados`).
 
 **Eventos de Stripe que se procesan:**
 

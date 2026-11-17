@@ -88,6 +88,10 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D36 | La **agenda** es de turnos de toma de muestras: solo la ven el laboratorio y la administración | La cita reserva un cupo en el laboratorio; no es una consulta médica. Al médico le aparecía igual que al laboratorista y confundía. El médico trabaja con solicitudes, resultados y tratamientos. | Agenda por médico (exigiría citas médicas, que el sistema no tiene) |
 | D37 | La cita se paga **a través de su solicitud** de exámenes, no con un pago aparte | El precio depende de los exámenes elegidos. El portal ofrece "Elegir exámenes y pagar" en cada cita pendiente; al pedir exámenes se puede vincular una cita pendiente; al pagar, la cita queda confirmada. | Cobrar la cita por separado |
 | D38 | **Paginación en el servidor**, opcional (`?pagina`) y con `OFFSET … FETCH` estándar | Las listas (auditoría, usuarios, pagos, solicitudes, correos, pacientes) crecen sin límite. Paginar en la base evita traer miles de filas. Sin `?pagina` la respuesta es la de antes (compatibilidad), y la misma SQL sirve en Azure SQL y en Supabase. | Paginar en el navegador (trae todo igual) |
+| D39 | **Un solo login** para toda la plataforma (`/ingresar`), con elección de rol | Antes había dos logins: el del portal y `/admin/login`. Ahora todos entran por `/ingresar` y van a su portal según el rol; con varios roles se elige en un diálogo. Los dos frontends comparten el origen, así que la sesión se pasa por `sessionStorage`. Desde cualquier portal se puede **cambiar de rol** sin volver a ingresar. Solo el paciente puede crear su cuenta; al personal lo crea el administrador. | Unir los dos frontends en uno (reescribir Flutter o Angular) |
+| D40 | **Color por rol**: paciente verde, médico azul, laboratorista morado, administrador gris pizarra | Evita trabajar con el rol equivocado. Se redefine la paleta con una clase `.rol-*` sobre el marco, sin tocar cada pantalla. | Solo un letrero con el rol |
+| D41 | **Precios con IVA incluido** y desglose al final (subtotal, IVA, total). Factura en PDF y XML con la estructura del SRI | No cambia lo que se cobra ni el esquema de la base. Se muestra lo que se compra antes de pagar y se entrega la factura por correo. | Sumar el IVA encima del precio, lo que cambia todos los totales y el procedimiento `sp_crear_solicitud` |
+| D42 | Adjuntos del correo **generados al enviar**, buscando la solicitud por el código del asunto | No hace falta una columna nueva en `notificacion`, que también se replica a Supabase. Si el documento falla, el correo sale igual. | Columna `solicitud_id` en `notificacion` (cambio de esquema en las 2 bases) |
 
 ## 5. Registro cronológico
 
@@ -339,6 +343,33 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
   - Angular y Flutter compilan sin observaciones.
   - No se revisaron las pantallas en un navegador: eso exige ingresar contraseñas en el sitio publicado; queda para el equipo.
 - **Corrección de un dato:** Rosa Guamán es paciente de ventanilla **sin cuenta**; no puede iniciar sesión.
+
+### 2026-11-17 — Segunda revisión del equipo
+- **Registro del personal:** solo el paciente crea su cuenta. El login lo aclara: médicos, laboratoristas y administradores los crea el administrador en "Usuarios y roles".
+- **Login único** (D39):
+  - `/ingresar` sirve para todos los roles; `/login` y `/admin/login` redirigen ahí;
+  - con un solo rol se entra directo; con varios aparece el diálogo "¿Con qué rol desea ingresar?";
+  - para cambiar de rol: en el portal, el botón "Cambiar de rol"; en el sistema del personal, "⇄ Cambiar de rol" (incluye el rol de paciente);
+  - "Salir" cierra las dos sesiones.
+- **Colores por rol** (D40): se aplican en el menú, los botones, los enlaces y la etiqueta del rol.
+- **IVA al final y resumen antes de pagar** (D41): el detalle de la solicitud muestra el "Resumen del pedido" (cada examen, subtotal, IVA 15 % y total) antes de los botones de pago. Una vez pagado, muestra el mismo resumen y los botones "Factura (PDF)" y "Factura (XML)". El administrador también puede descargarlas.
+- **Correos con adjuntos** (D42): el del pago lleva la factura en PDF y XML; el de resultados, el PDF de resultados.
+- **Indicador en los resultados:** ↑ alto, ↓ bajo, – normal, según el rango de referencia. Se ve en el portal, en el sistema del personal y en el PDF (las flechas usan la fuente Symbol, porque Helvetica no las tiene). La API devuelve `nivel` en cada valor.
+- **Buscadores y páginas de 10:**
+  - en el sistema del personal, las listas paginadas en el servidor pasan a 10 por página; el catálogo, las reglas, los diagnósticos y la agenda se buscan y paginan en el navegador (`paginarLocal`);
+  - en el portal, las citas, los exámenes, los tratamientos, los pagos y el catálogo para pedir exámenes tienen buscador y páginas de 10.
+- **Pruebas (dominio público, después del despliegue):**
+  - flujo de factura: 10/10. Cubre:
+    - resumen con IVA y 409 sin pago;
+    - pago por transferencia aprobado;
+    - factura PDF y XML: clave de 49 dígitos válida, base + IVA = total, 403 para otro paciente;
+    - resultados con indicador (glucosa ↑ alto);
+    - PDF de resultados;
+    - los dos correos ENVIADOS por Mailjet con sus adjuntos, sin errores en el log.
+  - regresión: endpoints 16/16 y flujo de cita 6/6. `/`, `/ingresar`, `/login`, `/admin/` y `/admin/login` responden 200; `/admin/login` lleva al login único (visto en el navegador).
+  - Angular y Flutter compilan sin observaciones.
+  - Datos de prueba que quedan: SOL-2026-000018 de Sofía (pagada y con resultados) y otra solicitud de Sofía sin pagar, que dejó el flujo de cita.
+  - No se probó en el navegador el diálogo de roles ni las pantallas internas: exigen ingresar contraseñas en el sitio publicado. Queda para el equipo.
 
 ## 6. Pendientes
 
