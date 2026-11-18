@@ -158,15 +158,15 @@ def pdf_receta(r: dict) -> bytes:
     izquierda = [Paragraph("Rp.", sub)]
     derecha = [Paragraph("Indicaciones", sub)]
     for n, i in enumerate(r["items"], start=1):
-        duracion = f" por {i['duracion_dias']} días" if i["duracion_dias"] else ""
+        como = " ".join(x for x in (i["dosis"], i["frecuencia"],
+                                    f"por {i['duracion_dias']} días" if i["duracion_dias"] else "") if x)
+        detalle = ". ".join(_e(x) for x in (como, i.get("indicaciones")) if x)
         izquierda.append(Paragraph(
             f"<b>{n}. {_e(i['nombre'])}</b> {_e(i['presentacion'] or '')}"
             + (f"<br/>Cantidad: {_e(i['cantidad'])}" if i.get("cantidad") else "")
-            + f"<br/><font color='#555555'>Vía {_e((i['via'] or 'oral').lower())}</font>", _celda))
+            + (f"<br/><font color='#555555'>Vía {_e(i['via'].lower())}</font>" if i.get("via") else ""), _celda))
         izquierda.append(Spacer(1, 0.25 * cm))
-        derecha.append(Paragraph(
-            f"<b>{n}. {_e(i['nombre'])}:</b> {_e(i['dosis'])} {_e(i['frecuencia'])}{duracion}."
-            + (f" {_e(i['indicaciones'])}" if i.get("indicaciones") else ""), _celda))
+        derecha.append(Paragraph(f"<b>{n}. {_e(i['nombre'])}:</b> {(detalle or 'según indicación médica').rstrip('.')}.", _celda))
         derecha.append(Spacer(1, 0.25 * cm))
     if r.get("indicaciones_generales"):
         derecha += [Spacer(1, 0.2 * cm), Paragraph("Además:", sub)]

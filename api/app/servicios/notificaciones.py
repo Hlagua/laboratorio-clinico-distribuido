@@ -46,7 +46,7 @@ def adjuntos_para(tipo: str, asunto: str) -> list[dict]:
     resultados en PDF. El código de la solicitud viene en el asunto, que lo
     arman los procedimientos almacenados con un formato fijo.
     """
-    if tipo not in ("PAGO_APROBADO", "RESULTADO_LISTO", "RESULTADO_MEDICO"):
+    if tipo not in ("PAGO_APROBADO", "RESULTADO_LISTO", "RESULTADO_MEDICO", "RECETA"):
         return []
     codigo = _CODIGO_SOLICITUD.search(asunto)
     if not codigo:
@@ -55,6 +55,12 @@ def adjuntos_para(tipo: str, asunto: str) -> list[dict]:
     from ..pdf import pdf_factura, pdf_resultados
     from .examenes import obtener_solicitud
 
+    if tipo == "RECETA":
+        from .recetas import SQL_RECETAS, _con_items
+        from ..pdf import pdf_receta
+        r = db.leer_uno(SQL_RECETAS + " WHERE s.codigo = ? ORDER BY r.updated_at DESC OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY",
+                        codigo.group())
+        return [_adjunto("application/pdf", f"receta-{codigo.group()}.pdf", pdf_receta(_con_items([r])[0]))] if r else []
     s = obtener_solicitud(0, codigo.group())
     if tipo in ("RESULTADO_LISTO", "RESULTADO_MEDICO"):
         return [_adjunto("application/pdf", f"resultados-{s['codigo']}.pdf", pdf_resultados(s))]

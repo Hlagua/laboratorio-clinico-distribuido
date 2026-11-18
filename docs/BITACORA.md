@@ -100,6 +100,7 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D48 | **La cita de control es gratis**: queda confirmada al agendarla, sin cobro (`10_control_gratis.sql`) | Decisión del equipo: el control para ver los resultados está incluido en la consulta. El paciente puede cancelarlo porque no tiene pago. | Cobrar el control como una consulta nueva |
 | D49 | **Tratamientos y recetas solo para el médico y el paciente** | Son datos clínicos. El laboratorio y la administración ven los datos del paciente y sus exámenes, no sus tratamientos ni recetas (403 en la API). La factura la ve el laboratorio solo si cobró en ventanilla. | Dejar que el personal vea todo |
 | D50 | **El sistema del personal no se traba tras un despliegue** | Una pestaña abierta pedía archivos de la versión anterior; Nginx devolvía index.html en su lugar y la navegación fallaba sin aviso. Ahora un archivo inexistente da 404, `index.html` va sin caché y, si una sección no carga, la página se recarga sola en esa dirección. | Pedir al usuario que recargue |
+| D51 | **Receta simple y unida al tratamiento** (`11_receta_simple.sql`) | El médico escribe cada medicamento en una línea (izquierda) y cómo tomarlo en las indicaciones (derecha); la dosis, la frecuencia y los días dejan de ser campos aparte. Guardar la receta registra (o actualiza) el tratamiento del paciente y le envía la receta por correo con el PDF; en el portal la ve desde "Tratamientos". | Campos separados de dosis, frecuencia y días (repetían lo que va en las indicaciones) |
 
 ## 5. Registro cronológico
 
@@ -415,6 +416,12 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
   - fecha de nacimiento entre 1900 y hoy (máximo 120 años) en los formularios y en la API (422).
 - Control gratis (D48); tratamientos y recetas solo para el médico y el paciente (D49); el sistema ya no se traba tras un despliegue (D50).
 - Pruebas: consulta 25/25, receta 11/11, factura 10/10, cita 6/6. Fechas de 1700 y futuras: 422. Administrador y laboratorista: 403 en tratamientos y recetas. Nginx: un archivo inexistente responde 404.
+
+### 2026-11-18 — Receta simple, tratamiento y correo (D51)
+- Sistema del personal: la receta muestra una línea por medicamento (hasta 120 caracteres, con contador) y sus indicaciones (hasta 1000). Lo que propone la base de conocimientos se arma como "Nombre presentación" y "dosis, frecuencia, días e indicaciones".
+- API: la dosis y la frecuencia son opcionales; guardar la receta crea o actualiza el tratamiento (uno por solicitud y médico) y encola el correo `RECETA` con el PDF adjunto.
+- Portal: "Tratamientos" tiene el botón "Ver receta y exámenes".
+- Pruebas: receta simple 6/6 (tratamiento creado y actualizado sin duplicar, PDF, correo ENVIADO con el adjunto), receta 11/11 y consulta 25/25.
 
 ## 6. Pendientes
 

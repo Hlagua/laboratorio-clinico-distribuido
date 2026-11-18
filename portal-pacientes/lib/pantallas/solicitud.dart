@@ -465,9 +465,14 @@ class _RecetasState extends State<_Recetas> {
           padding: const EdgeInsets.only(top: 6),
           child: Text.rich(TextSpan(children: [
             TextSpan(text: '${i['orden']}. ${i['nombre']}: ', style: const TextStyle(fontWeight: FontWeight.w600)),
+            // La dosis puede venir sola en las indicaciones (receta simple): se arma sin huecos.
             TextSpan(
-                text: '${i['dosis']} ${i['frecuencia']}${i['duracion_dias'] != null ? ' por ${i['duracion_dias']} días' : ''}. '
-                    '${i['indicaciones'] ?? ''}'),
+                text: [
+              [i['dosis'], i['frecuencia'], if (i['duracion_dias'] != null) 'por ${i['duracion_dias']} días']
+                  .where((x) => x != null && '$x'.isNotEmpty)
+                  .join(' '),
+              i['indicaciones'] ?? '',
+            ].where((x) => '$x'.isNotEmpty).join('. ')),
           ])),
         ),
       if (r['indicaciones_generales'] != null) ...[

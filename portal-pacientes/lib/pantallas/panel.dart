@@ -236,6 +236,15 @@ class _PanelState extends State<Panel> {
             const SizedBox(height: 6),
             Text('Dr(a). ${t['medico']} · desde ${t['fecha_inicio']}${t['fecha_fin'] != null ? ' hasta ${t['fecha_fin']}' : ''}',
                 style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            if (t['solicitud_id'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.medication),
+                  label: const Text('Ver receta y exámenes'),
+                  onPressed: () => _abrirSolicitud(t['solicitud_id'] as int),
+                ),
+              ),
           ]),
         ),
       );

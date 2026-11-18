@@ -74,13 +74,7 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').tri
                          placeholder="Escriba el medicamento…" aria-label="Medicamento" />
                   <button type="button" class="secundario chico" (click)="quitar(i)" title="Quitar">✕</button>
                 </div>
-                <div class="mini">
-                  <input maxlength="120" [(ngModel)]="f.presentacion" (ngModelChange)="tocado(f)" placeholder="Presentación" />
-                  <input maxlength="60" [(ngModel)]="f.dosis" (ngModelChange)="tocado(f)" placeholder="Dosis" />
-                  <input maxlength="60" [(ngModel)]="f.frecuencia" (ngModelChange)="tocado(f)" placeholder="Frecuencia" />
-                  <input type="number" min="1" [(ngModel)]="f.duracion_dias" (ngModelChange)="tocado(f)" placeholder="Días" class="dias" />
-                  <input maxlength="40" [(ngModel)]="f.cantidad" placeholder="Cantidad" class="cant" />
-                </div>
+                <small class="muted contador">{{ f.nombre.length }}/120 · medicamento, concentración y cantidad (ej. Ibuprofeno 600 mg, 20 tabletas)</small>
                 @if (f.base) {
                   <small [class]="f.modificado ? 'muted' : 'sug'">{{ f.modificado ? 'modificado por el médico' : 'sugerido' }}</small>
                   @if (f.nota) { <small class="muted"> · {{ f.nota }}</small> }
@@ -94,10 +88,10 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').tri
             <h3>Indicaciones</h3>
             @for (f of filas(); track $index; let i = $index) {
               <div class="ind">
-                <label>{{ i + 1 }}. {{ f.nombre || 'Medicamento' }}
-                  @if (f.dosis || f.frecuencia) { <small class="muted">— {{ f.dosis }} {{ f.frecuencia }}{{ f.duracion_dias ? ' por ' + f.duracion_dias + ' días' : '' }}</small> }
-                </label>
-                <textarea rows="2" maxlength="1000" [(ngModel)]="f.indicaciones" (ngModelChange)="tocado(f)" placeholder="Cómo tomarlo"></textarea>
+                <label>{{ i + 1 }}. {{ f.nombre || 'Medicamento' }}</label>
+                <textarea rows="2" maxlength="1000" [(ngModel)]="f.indicaciones" (ngModelChange)="tocado(f)"
+                          placeholder="Cómo tomarlo: dosis, cada cuánto, por cuántos días y recomendaciones"></textarea>
+                <small class="muted">{{ (f.indicaciones ?? '').length }}/1000</small>
                 @if (f.advertencias) { <small class="advertencia">⚠ {{ f.advertencias }}</small> }
               </div>
             }
@@ -146,6 +140,7 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').tri
     .mini { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
     .mini input { flex: 1 1 110px; min-width: 0; }
     .mini .dias { flex: 0 0 70px; } .mini .cant { flex: 0 1 110px; }
+    .contador { display: block; margin-top: 2px; }
     .ind { margin-bottom: 10px; } .ind label { display: block; font-weight: 600; margin-bottom: 4px; }
     textarea { width: 100%; }
     .sug { background: var(--azul-suave); color: var(--azul); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
@@ -219,10 +214,16 @@ export class RecetaPanel implements OnInit {
     return `${m.nombre} · ${m.presentacion}`;
   }
 
+  /** "1 tableta (500 mg) cada 12 horas por 90 días. Tomar con el desayuno…" */
+  private comoTomar(m: Medicamento): string {
+    const dias = m.duracion_dias ? ` por ${m.duracion_dias} días` : '';
+    return `${m.dosis} ${m.frecuencia}${dias}. ${m.indicaciones}`.slice(0, 1000);
+  }
+
   private desdeBase(m: Medicamento): Fila {
     return {
-      medicamento_id: m.medicamento_id, nombre: m.nombre, presentacion: m.presentacion, via: m.via, dosis: m.dosis,
-      frecuencia: m.frecuencia, duracion_dias: m.duracion_dias, cantidad: null, indicaciones: m.indicaciones,
+      medicamento_id: m.medicamento_id, nombre: `${m.nombre} ${m.presentacion}`.slice(0, 120), presentacion: null, via: null,
+      dosis: '', frecuencia: '', duracion_dias: null, cantidad: null, indicaciones: this.comoTomar(m),
       modificado: false, base: m, advertencias: m.advertencias, nota: m.nota ?? null,
     };
   }
@@ -242,9 +243,11 @@ export class RecetaPanel implements OnInit {
   protected escribiendo(f: Fila) {
     const m = this.buscar(f.nombre);
     if (m && (!f.base || f.base.medicamento_id !== m.medicamento_id) && !f.modificado) {
-      const nombre = normalizar(this.etiqueta(m)) === normalizar(f.nombre) ? m.nombre : f.nombre;
+      // Si eligió de la lista, queda "Nombre presentación"; si va escribiendo, se respeta lo que escribe.
+      const nombre = normalizar(this.etiqueta(m)) === normalizar(f.nombre) ? `${m.nombre} ${m.presentacion}` : f.nombre;
       Object.assign(f, this.desdeBase(m), { nombre, nota: f.nota });
-    } else if (!m && f.base && !normalizar(f.base.nombre).startsWith(normalizar(f.nombre))) {
+    } else if (!m && f.base && !normalizar(f.nombre).startsWith(normalizar(f.base.nombre))
+               && !normalizar(f.base.nombre).startsWith(normalizar(f.nombre))) {
       // Escribió otro medicamento que no está en la base: deja de estar vinculado.
       f.medicamento_id = null;
       f.base = null;
@@ -254,7 +257,8 @@ export class RecetaPanel implements OnInit {
   }
 
   protected alSalir(f: Fila) {
-    if (f.base && normalizar(f.base.nombre).startsWith(normalizar(f.nombre))) f.nombre = f.base.nombre;
+    // Al salir del campo, un nombre a medio escribir se completa con el del vademécum y su presentación.
+    if (f.base && normalizar(f.base.nombre).startsWith(normalizar(f.nombre))) f.nombre = `${f.base.nombre} ${f.base.presentacion}`;
   }
 
   protected tocado(f: Fila) {
@@ -283,9 +287,9 @@ export class RecetaPanel implements OnInit {
   async guardar() {
     this.error.set('');
     this.aviso.set('');
-    const incompleta = this.filas().findIndex((f) => !f.nombre?.trim() || !f.dosis?.trim() || !f.frecuencia?.trim());
+    const incompleta = this.filas().findIndex((f) => !f.nombre?.trim());
     if (incompleta >= 0) {
-      this.error.set(`Complete el nombre, la dosis y la frecuencia del medicamento ${incompleta + 1}.`);
+      this.error.set(`Escriba el nombre del medicamento ${incompleta + 1}.`);
       return;
     }
     this.guardando.set(true);

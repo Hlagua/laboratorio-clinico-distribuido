@@ -11,6 +11,7 @@ El médico puede cambiar o borrar todo. Lo que se guarda es su receta; de cada
 medicamento se registra si modificó lo sugerido.
 """
 import json
+from datetime import date, timedelta
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -166,6 +167,8 @@ def guardar_receta(solicitud_id: int):
         if not isinstance(i, dict):
             raise ApiError("Cada medicamento debe ser un objeto.", 422, "TIPO_INVALIDO")
         x = {k: i.get(k) for k in _CAMPOS_ITEM}
+        if not isinstance(x["nombre"], str) or not x["nombre"].strip():
+            raise ApiError("Cada medicamento necesita su nombre.", 422, "CAMPO_REQUERIDO")
         for k in ("medicamento_id", "duracion_dias"):
             if x[k] is not None and (not isinstance(x[k], int) or x[k] <= 0):
                 raise ApiError(f"'{k}' debe ser un entero positivo.", 422, "TIPO_INVALIDO")
@@ -177,11 +180,60 @@ def guardar_receta(solicitud_id: int):
                 x[k] = x[k].strip() or None
         x["modificado"] = bool(i.get("modificado"))
         limpios.append(x)
+    diagnostico = texto(d, "diagnostico", False, 500)
+    generales = texto(d, "indicaciones_generales", False, 2000)
     receta_id = db.ejecutar_sp(
         "sp_guardar_receta", "receta_id", solicitud_id=solicitud_id, medico_id=perfil("medico_id"),
-        diagnostico=texto(d, "diagnostico", False, 500), indicaciones_generales=texto(d, "indicaciones_generales", False, 2000),
+        diagnostico=diagnostico, indicaciones_generales=generales,
         items=json.dumps(limpios, ensure_ascii=False), usuario_id=usuario_actual()["usuario_id"])
-    return jsonify(_con_items(db.leer(SQL_RECETAS + " WHERE r.receta_id = ?", receta_id))[0])
+    receta = _con_items(db.leer(SQL_RECETAS + " WHERE r.receta_id = ?", receta_id))[0]
+    _registrar_tratamiento(receta, diagnostico, generales)
+    _avisar_paciente(receta)
+    return jsonify(receta)
+
+
+def _indicaciones_texto(receta: dict, generales: str | None) -> str:
+    """Resumen de la receta para el tratamiento: cada medicamento con cómo tomarlo, y lo demás."""
+    lineas = []
+    for i in receta["items"]:
+        como = " ".join(x for x in (i["dosis"], i["frecuencia"],
+                                    f"por {i['duracion_dias']} días" if i["duracion_dias"] else "") if x)
+        detalle = ". ".join(x for x in (como, i["indicaciones"]) if x)
+        lineas.append(f"{i['orden']}. {i['nombre']}" + (f": {detalle}" if detalle else ""))
+    if generales:
+        lineas.append(f"Además: {generales}")
+    return "\n".join(lineas)[:2000]
+
+
+def _registrar_tratamiento(receta: dict, diagnostico: str | None, generales: str | None):
+    """La receta queda también como tratamiento del paciente (lo ven él y su médico en 'Tratamientos').
+
+    Uno por solicitud y médico: si ya existe se actualiza con la receta nueva.
+    """
+    indicaciones = _indicaciones_texto(receta, generales)
+    dx = (diagnostico or "Tratamiento según receta")[:1000]
+    previo = db.leer_uno("SELECT tratamiento_id FROM {e}.tratamiento WHERE solicitud_id = ? AND medico_id = ? "
+                         "ORDER BY tratamiento_id DESC OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY",
+                         receta["solicitud_id"], receta["medico_id"], contingencia=False)
+    if previo:
+        db.ejecutar("UPDATE dbo.tratamiento SET diagnostico = ?, indicaciones = ?, updated_at = SYSUTCDATETIME() "
+                    "WHERE tratamiento_id = ?", dx, indicaciones, previo["tratamiento_id"])
+        return
+    duraciones = [i["duracion_dias"] for i in receta["items"] if i["duracion_dias"]]
+    hoy = date.today()
+    db.ejecutar_sp("sp_registrar_tratamiento", "tratamiento_id", paciente_id=receta["paciente_id"],
+                   medico_id=receta["medico_id"], diagnostico=dx, indicaciones=indicaciones, fecha_inicio=hoy,
+                   fecha_fin=hoy + timedelta(days=max(duraciones)) if duraciones else None,
+                   solicitud_id=receta["solicitud_id"], usuario_id=usuario_actual()["usuario_id"])
+
+
+def _avisar_paciente(receta: dict):
+    """Correo al paciente con la receta en PDF (el notificador la adjunta al enviar)."""
+    from .notificaciones import encolar
+    persona = db.leer_uno("SELECT persona_id FROM {e}.paciente WHERE paciente_id = ?", receta["paciente_id"])
+    encolar(persona["persona_id"], "RECETA", f"Receta médica - {receta['solicitud_codigo']}",
+            f"Dr(a). {receta['medico']} le emitió una receta ({receta['solicitud_codigo']}). La encuentra en el portal, "
+            "en 'Tratamientos', con las indicaciones de cada medicamento.")
 
 
 @bp.get("/recetas/<int:receta_id>/pdf")
