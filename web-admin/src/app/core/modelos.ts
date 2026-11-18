@@ -37,7 +37,33 @@ export interface Cita {
   solicitud_id: number | null;
   solicitud_codigo: string | null;
   solicitud_estado: string | null;
+  solicitud_total?: number | null;
   examenes_resumen: string | null;
+  franja_id: number;
+  /** MUESTRA (turno de laboratorio) o CONSULTA (con un médico). */
+  tipo: 'MUESTRA' | 'CONSULTA';
+  /** PACIENTE (la reservó él) o MEDICO (control agendado por el médico). */
+  origen: 'PACIENTE' | 'MEDICO';
+  medico_id: number | null;
+  medico: string | null;
+  especialidad: string | null;
+  vence_at: string | null;
+}
+
+export interface MedicoAgenda {
+  medico_id: number;
+  nombre: string;
+  especialidad: string;
+  turnos_libres: number;
+  precio_consulta: number | null;
+}
+
+export interface Franja {
+  franja_id: number;
+  fecha: string;
+  hora_inicio: string;
+  hora_fin: string;
+  cupos_libres: number;
 }
 
 export interface SolicitudResumen {
@@ -52,6 +78,7 @@ export interface SolicitudResumen {
   medico_id: number | null;
   medico: string | null;
   examenes_resumen?: string | null;
+  tipo?: 'EXAMENES' | 'CONSULTA';
 }
 
 export interface ValorResultado {

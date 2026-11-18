@@ -109,7 +109,7 @@ def pdf_factura(f: dict) -> bytes:
           Paragraph(f"<b>Factura N.º</b> {f['numero']} &nbsp; <b>Fecha:</b> {f['fecha']:%d/%m/%Y %H:%M} &nbsp; "
                     f"<b>Ambiente:</b> pruebas", _normal),
           Paragraph(f"<b>Clave de acceso:</b> <font size=8>{f['clave_acceso']}</font>", _normal), Spacer(1, 0.3 * cm),
-          Paragraph(f"<b>Cliente:</b> {_e(s['apellidos'])} {_e(s['nombres'])} &nbsp; <b>Cédula:</b> {s['cedula']}", _normal),
+          Paragraph(f"<b>Cliente:</b> {_e(s['apellidos'])} {_e(s['nombres'])} &nbsp; <b>C.I./RUC:</b> {s['cedula']}", _normal),
           Paragraph(f"<b>Correo:</b> {_e(s['email'] or '')} &nbsp; <b>Dirección:</b> {_e(s['direccion'] or 'S/N')}", _normal),
           Paragraph(f"<b>Solicitud:</b> {s['codigo']} &nbsp; <b>Forma de pago:</b> {_e(metodo)}", _normal),
           Spacer(1, 0.4 * cm)]

@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 from .. import config, db
 from ..errores import ApiError
 from ..seguridad import emitir_token, hash_password, requiere, usuario_actual, validar_password, verificar_password
-from ..validacion import cedula, cuerpo, fecha, texto
+from ..validacion import cedula, cuerpo, fecha, nombre, telefono, texto
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -53,9 +53,9 @@ def registro():
         raise ApiError("El correo no es válido.", 422, "EMAIL_INVALIDO")
     paciente_id = db.ejecutar_sp(
         "sp_registrar_paciente", "paciente_id",
-        cedula=cedula(texto(d, "cedula", maximo=10)), nombres=texto(d, "nombres", maximo=100),
-        apellidos=texto(d, "apellidos", maximo=100), fecha_nacimiento=fecha(d, "fecha_nacimiento"),
-        sexo=texto(d, "sexo", maximo=1).upper(), telefono=texto(d, "telefono", False, 20), email=email,
+        cedula=cedula(texto(d, "cedula", maximo=10)), nombres=nombre(d, "nombres"),
+        apellidos=nombre(d, "apellidos"), fecha_nacimiento=fecha(d, "fecha_nacimiento"),
+        sexo=texto(d, "sexo", maximo=1).upper(), telefono=telefono(d), email=email,
         direccion=texto(d, "direccion", False, 250), password_hash=hash_password(password),
         tipo_sangre=texto(d, "tipo_sangre", False, 3), alergias=texto(d, "alergias", False, 500),
     )

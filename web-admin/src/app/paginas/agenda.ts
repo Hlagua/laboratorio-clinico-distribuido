@@ -12,9 +12,16 @@ import { paginarLocal, Paginador } from '../core/paginador';
   imports: [FormsModule, Paginador],
   template: `
     <div class="entre">
-      <div><h1>Agenda del día</h1>
-        <p class="sub">Turnos de toma de muestras en el laboratorio. Una cita queda <strong>confirmada</strong> cuando el paciente
-          paga los exámenes vinculados a ella; si no paga en 30 minutos, se cancela sola y el cupo se libera.</p></div>
+      <div><h1>{{ auth.tiene('MEDICO') ? 'Mis consultas del día' : 'Agenda del día' }}</h1>
+        <p class="sub">
+          @if (auth.tiene('MEDICO')) {
+            Consultas de su agenda. Atienda al paciente, ordénele los exámenes y agéndele el control.
+          } @else if (auth.tiene('LABORATORISTA')) {
+            Turnos de toma de muestras. La cita queda <strong>atendida</strong> al registrar la toma de muestra.
+          } @else {
+            Consultas médicas y turnos de toma de muestras. Una cita queda <strong>confirmada</strong> cuando se paga.
+          }
+        </p></div>
       <div class="fila">
         <div class="campo"><label for="f">Fecha</label>
           <input id="f" type="date" [(ngModel)]="fecha" (change)="cargar()" /></div>
@@ -25,18 +32,22 @@ import { paginarLocal, Paginador } from '../core/paginador';
     <div class="card tabla-scroll">
       <div class="buscador"><input type="search" placeholder="Buscar por paciente, cédula, solicitud o examen" [ngModel]="q()" (ngModelChange)="q.set($event); pag.set(1)" /></div>
       <table>
-        <thead><tr><th>Hora</th><th>Paciente</th><th>Cédula</th><th>Exámenes</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Hora</th><th>Paciente</th><th>Cédula</th><th>Tipo</th><th>Exámenes / cobro</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
         <tbody>
           @for (c of vista().items; track c.cita_id) {
             <tr>
               <td><strong>{{ hora(c.hora_inicio) }}</strong>–{{ hora(c.hora_fin) }}</td>
               <td>{{ c.paciente }}</td><td>{{ c.cedula }}</td>
+              <td>@if (c.tipo === 'CONSULTA') { Consulta{{ c.origen === 'MEDICO' ? ' (control)' : '' }}<br /><small class="muted">{{ c.medico }}</small> }
+                @else { Toma de muestras }</td>
               <td>@if (c.solicitud_id) { <strong>{{ c.solicitud_codigo }}</strong><br /><small>{{ c.examenes_resumen }}</small> }
                 @else { <small class="muted">Aún no elige exámenes</small> }</td>
               <td>{{ c.motivo }}</td>
               <td><span [class]="claseEstado(c.estado)">{{ textoEstado(c.estado) }}</span></td>
               <td class="acciones">
-                @if (c.solicitud_id) {
+                @if (auth.tiene('MEDICO') && c.tipo === 'CONSULTA') {
+                  <button class="chico" (click)="atender(c)">{{ c.estado === 'ATENDIDA' ? 'Ver consulta' : 'Atender' }}</button>
+                } @else if (c.solicitud_id) {
                   <button class="chico" (click)="abrir(c.solicitud_id)">Abrir solicitud</button>
                 }
                 @if (auth.tiene('ADMIN') && (c.estado === 'PENDIENTE_PAGO' || c.estado === 'CONFIRMADA')) {
@@ -45,7 +56,7 @@ import { paginarLocal, Paginador } from '../core/paginador';
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="7" class="vacio">{{ cargando() ? 'Cargando…' : 'No hay citas para esta fecha.' }}</td></tr>
+            <tr><td colspan="8" class="vacio">{{ cargando() ? 'Cargando…' : 'No hay citas para esta fecha.' }}</td></tr>
           }
         </tbody>
       </table>
@@ -89,6 +100,10 @@ export class Agenda implements OnInit {
 
   abrir(solicitudId: number) {
     this.router.navigate(['/solicitudes', solicitudId]);
+  }
+
+  atender(c: Cita) {
+    this.router.navigate(['/consulta', c.cita_id]);
   }
 
   async cancelar(c: Cita) {

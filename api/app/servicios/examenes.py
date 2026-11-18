@@ -15,7 +15,7 @@ bp = Blueprint("examenes", __name__, url_prefix="/api")
 log = logging.getLogger("api")
 
 SQL_SOLICITUDES = """
-SELECT s.solicitud_id, s.codigo, s.estado, s.total, s.observaciones, s.created_at, s.cita_id,
+SELECT s.solicitud_id, s.codigo, s.estado, s.total, s.observaciones, s.created_at, s.cita_id, s.tipo,
        pa.paciente_id, p.cedula, CONCAT(p.nombres, ' ', p.apellidos) AS paciente,
        s.medico_id, CONCAT(pm.nombres, ' ', pm.apellidos) AS medico,
        (SELECT STRING_AGG(t.nombre, ', ') FROM {e}.solicitud_detalle sd
@@ -80,12 +80,26 @@ def crear_solicitud():
         examenes=json.dumps(lista_enteros(d, "examenes")), medico_id=medico_id,
         cita_id=entero(d, "cita_id", False), observaciones=texto(d, "observaciones", False),
         usuario_id=usuario_actual()["usuario_id"])
-    return jsonify(obtener_solicitud(solicitud_id)), 201
+    s = obtener_solicitud(solicitud_id)
+    if rol == "MEDICO":
+        # El paciente se entera por correo de los exámenes que le ordenó su médico y de cómo pagarlos.
+        from .notificaciones import encolar
+        persona = db.leer_uno("SELECT persona_id FROM {e}.paciente WHERE paciente_id = ?", paciente_id)
+        encolar(persona["persona_id"], "EXAMENES_ORDENADOS", f"Exámenes ordenados por su médico - {s['codigo']}",
+                f"Dr(a). {s['medico']} le ordenó: {s['examenes_resumen']} (total USD {s['total']:.2f}). Páguelos desde "
+                "'Mis exámenes' en el portal y acuda al laboratorio de lunes a sábado de 07:00 a 11:00. Los resultados "
+                "le llegarán a usted y a su médico.")
+    return jsonify(s), 201
 
 
 @bp.get("/solicitudes/mias")
 @requiere("PACIENTE")
 def mis_solicitudes():
+    """?tipo=EXAMENES deja fuera los cobros de consulta (esos se ven en 'Mis citas')."""
+    tipo = (request.args.get("tipo") or "").upper()
+    if tipo in ("EXAMENES", "CONSULTA"):
+        return jsonify(db.leer(SQL_SOLICITUDES + " WHERE s.paciente_id = ? AND s.tipo = ? ORDER BY s.solicitud_id DESC",
+                               perfil("paciente_id"), tipo))
     return jsonify(db.leer(SQL_SOLICITUDES + " WHERE s.paciente_id = ? ORDER BY s.solicitud_id DESC", perfil("paciente_id")))
 
 
@@ -96,6 +110,11 @@ def buscar_solicitudes():
     if request.args.get("estado"):
         condiciones.append("s.estado = ?")
         params.append(request.args["estado"].upper())
+    # El cobro de una consulta médica no es trabajo del laboratorio.
+    tipo = (request.args.get("tipo") or ("EXAMENES" if rol_actual() == "LABORATORISTA" else "")).upper()
+    if tipo in ("EXAMENES", "CONSULTA"):
+        condiciones.append("s.tipo = ?")
+        params.append(tipo)
     if request.args.get("cedula"):
         condiciones.append("p.cedula = ?")
         params.append(request.args["cedula"])
@@ -218,7 +237,26 @@ def registrar_resultado():
         sugerencias = evaluar_y_registrar(solicitud["solicitud_id"])
     except Exception as e:
         log.warning('{"evento":"base_conocimiento_error","detalle_id":%s,"error":"%s"}', detalle_id, str(e).replace('"', "'")[:200])
+    _avisar_medico(detalle_id)
     return jsonify(resultado_id=resultado_id, sugerencias_nuevas=sugerencias), 201
+
+
+def _avisar_medico(detalle_id: int):
+    """Con todos los resultados listos, el médico que ordenó los exámenes recibe el informe por correo."""
+    try:
+        s = db.leer_uno("""
+            SELECT s.codigo, s.estado, pm.persona_id, CONCAT(pp.nombres, ' ', pp.apellidos) AS paciente
+            FROM {e}.solicitud_detalle d JOIN {e}.solicitud_examen s ON s.solicitud_id = d.solicitud_id
+            JOIN {e}.medico m ON m.medico_id = s.medico_id JOIN {e}.persona pm ON pm.persona_id = m.persona_id
+            JOIN {e}.paciente pa ON pa.paciente_id = s.paciente_id JOIN {e}.persona pp ON pp.persona_id = pa.persona_id
+            WHERE d.detalle_id = ?""", detalle_id, contingencia=False)
+        if s and s["estado"] == "COMPLETADA":
+            from .notificaciones import encolar
+            encolar(s["persona_id"], "RESULTADO_MEDICO", f"Resultados listos de {s['paciente']} - {s['codigo']}",
+                    f"Los exámenes que ordenó para {s['paciente']} ({s['codigo']}) ya tienen resultados. "
+                    "Revíselos en el sistema antes de la cita de control.")
+    except Exception as e:
+        log.warning('{"evento":"aviso_medico_error","detalle_id":%s,"error":"%s"}', detalle_id, str(e).replace('"', "'")[:200])
 
 
 @bp.post("/solicitudes/detalle/<int:detalle_id>/muestra")
@@ -231,4 +269,10 @@ def registrar_muestra(detalle_id: int):
         perfil("laboratorista_id"), detalle_id)
     if not n:
         raise ApiError("El examen no existe, no está pagado o la muestra ya fue registrada.", 409, "ESTADO_INVALIDO")
+    # El paciente vino: su turno de toma de muestras queda ATENDIDO.
+    cita = db.leer_uno("SELECT c.cita_id FROM {e}.solicitud_detalle d JOIN {e}.solicitud_examen s ON s.solicitud_id = d.solicitud_id "
+                       "JOIN {e}.cita c ON c.cita_id = s.cita_id WHERE d.detalle_id = ? AND c.tipo = 'MUESTRA' "
+                       "AND c.estado = 'CONFIRMADA'", detalle_id, contingencia=False)
+    if cita:
+        db.ejecutar_sp("sp_atender_cita", cita_id=cita["cita_id"], usuario_id=usuario_actual()["usuario_id"])
     return jsonify(mensaje="Toma de muestra registrada.", detalle_id=detalle_id)

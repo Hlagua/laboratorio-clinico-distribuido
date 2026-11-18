@@ -7,7 +7,7 @@ interface Enlace { ruta: string; texto: string; roles: Rol[] }
 
 const MENU: Enlace[] = [
   { ruta: '/inicio', texto: 'Inicio', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
-  { ruta: '/agenda', texto: 'Agenda del día', roles: ['LABORATORISTA', 'ADMIN'] },
+  { ruta: '/agenda', texto: 'Agenda del día', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
   { ruta: '/solicitudes', texto: 'Solicitudes y resultados', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
   { ruta: '/nueva-solicitud', texto: 'Nueva solicitud', roles: ['LABORATORISTA', 'MEDICO'] },
   { ruta: '/pacientes', texto: 'Pacientes y tratamientos', roles: ['MEDICO', 'ADMIN', 'LABORATORISTA'] },
@@ -110,7 +110,8 @@ const MENU: Enlace[] = [
     .contingencia { background: var(--ambar-suave); color: var(--ambar); border-bottom: 1px solid #f0d68a; padding: 10px 24px; font-weight: 600; }
     main { padding: 24px; max-width: 1200px; }
     @media (max-width: 860px) {
-      .marco { grid-template-columns: 1fr; }
+      /* El menú arriba ocupa solo su alto; antes la fila se estiraba hasta llenar la pantalla. */
+      .marco { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
       .lateral { position: static; height: auto; }
       nav { flex-direction: row; flex-wrap: wrap; }
       main { padding: 16px; }

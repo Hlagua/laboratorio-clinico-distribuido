@@ -1,6 +1,6 @@
-import { Component, inject, input, OnInit, signal } from '@angular/core';
+import { Component, inject, input, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
 import { claseEstado, dinero, fechaHora, rango, textoEstado } from '../core/formato';
@@ -31,7 +31,7 @@ interface Captura { parametro: Parametro; valor: string }
           @if (tieneResultados()) {
             <button class="secundario" (click)="pdf()">Resultados (PDF)</button>
           }
-          @if (auth.tiene('ADMIN') && ['PAGADA', 'EN_PROCESO', 'COMPLETADA'].includes(s.estado)) {
+          @if (auth.tiene('ADMIN', 'LABORATORISTA') && ['PAGADA', 'EN_PROCESO', 'COMPLETADA'].includes(s.estado)) {
             <button class="secundario" (click)="factura('pdf')">Factura (PDF)</button>
             <button class="secundario" (click)="factura('xml')">Factura (XML)</button>
           }
@@ -39,6 +39,40 @@ interface Captura { parametro: Parametro; valor: string }
       </div>
       @if (s.estado === 'REGISTRADA') {
         <div class="alerta aviso">La solicitud aún no está pagada: no se pueden registrar muestras ni resultados.</div>
+        @if (auth.tiene('LABORATORISTA', 'ADMIN')) {
+          <div class="card cobro-ventanilla">
+            <h2>Cobrar en ventanilla</h2>
+            <p class="muted">El cobro pasa por la pasarela (Stripe). Tome los datos para la factura; el paciente paga con el QR en su
+              celular o aquí mismo. Al confirmarse el pago, la factura sale con estos datos.</p>
+            @if (!cobro()) {
+              <label class="check"><input type="checkbox" [(ngModel)]="consumidorFinal" /> Consumidor final (sin datos)</label>
+              @if (!consumidorFinal) {
+                <div class="fila">
+                  <div class="campo"><label for="fi">Cédula o RUC</label><input id="fi" [(ngModel)]="fact.identificacion" maxlength="13" /></div>
+                  <div class="campo"><label for="fn">Nombre o razón social</label><input id="fn" [(ngModel)]="fact.nombre" /></div>
+                </div>
+                <div class="fila">
+                  <div class="campo"><label for="fd">Dirección</label><input id="fd" [(ngModel)]="fact.direccion" /></div>
+                </div>
+              }
+              <div class="fila">
+                <div class="campo"><label for="fe">Correo para la factura (opcional)</label><input id="fe" type="email" [(ngModel)]="fact.email" /></div>
+              </div>
+              <button (click)="cobrar()" [disabled]="guardando() || (!consumidorFinal && (!fact.identificacion || !fact.nombre))">
+                Generar cobro de {{ dinero(s.total) }}</button>
+            } @else {
+              <div class="qr">
+                <img [src]="cobro()!.qr" alt="Código QR para pagar con Stripe" width="200" height="200" />
+                <div>
+                  <p><strong>{{ dinero(cobro()!.monto) }}</strong>. Escanee con la cámara del celular para pagar con tarjeta.</p>
+                  <a class="boton" [href]="cobro()!.checkout_url" target="_blank" rel="noopener">Abrir el pago en esta pantalla</a>
+                  <p class="muted">Esperando la confirmación de Stripe… se actualiza sola.</p>
+                  <button class="secundario chico" (click)="cancelarCobro()">Generar otro cobro</button>
+                </div>
+              </div>
+            }
+          </div>
+        }
       }
       @if (tieneResultados()) {
         <!-- Se recrea cuando cambia el número de resultados: re-lee las sugerencias. -->
@@ -130,10 +164,14 @@ interface Captura { parametro: Parametro; valor: string }
     h1 .badge { vertical-align: middle; margin-left: 8px; }
     .obs { background: var(--azul-suave); border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
     .cobro { margin: -12px 0 16px; color: var(--gris); }
+    .cobro-ventanilla .check { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .qr { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+    .qr img { border: 1px solid var(--borde); border-radius: 6px; background: #fff; }
+    a.boton { display: inline-block; background: var(--verde); color: #fff; padding: 8px 14px; border-radius: 6px; text-decoration: none; }
     .indicador { white-space: nowrap; font-weight: 600; }
   `,
 })
-export class SolicitudDetalle implements OnInit {
+export class SolicitudDetalle implements OnInit, OnDestroy {
   readonly id = input.required<string>();
   private readonly api = inject(Api);
   protected readonly auth = inject(AuthService);
@@ -146,6 +184,46 @@ export class SolicitudDetalle implements OnInit {
   protected readonly error = signal('');
   protected readonly aviso = signal('');
   protected readonly guardando = signal(false);
+  private readonly ruta = inject(ActivatedRoute);
+  /** Cobro en ventanilla: URL de Stripe Checkout y su QR mientras se espera la confirmación. */
+  protected readonly cobro = signal<{ pago_id: number; checkout_url: string; qr: string; monto: number } | null>(null);
+  protected consumidorFinal = false;
+  protected fact = { identificacion: '', nombre: '', direccion: '', email: '' };
+  private espera?: ReturnType<typeof setInterval>;
+
+  ngOnDestroy() {
+    clearInterval(this.espera);
+  }
+
+  async cobrar() {
+    this.error.set('');
+    this.guardando.set(true);
+    try {
+      const f = this.consumidorFinal ? { email: this.fact.email || null } : { ...this.fact, direccion: this.fact.direccion || null,
+        email: this.fact.email || null };
+      this.cobro.set(await this.api.post('/api/pagos/ventanilla', { solicitud_id: Number(this.id()), factura: f }));
+      // Se consulta cada 4 s hasta que el webhook de Stripe confirme el pago.
+      clearInterval(this.espera);
+      this.espera = setInterval(async () => {
+        const s = await this.api.get<Solicitud>(`/api/solicitudes/${this.id()}`).catch(() => null);
+        if (s && s.estado !== 'REGISTRADA') {
+          clearInterval(this.espera);
+          this.cobro.set(null);
+          await this.cargar(s);
+          this.aviso.set('Pago confirmado por Stripe. Ya puede tomar las muestras; la factura está lista.');
+        }
+      }, 4000);
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    } finally {
+      this.guardando.set(false);
+    }
+  }
+
+  cancelarCobro() {
+    clearInterval(this.espera);
+    this.cobro.set(null);
+  }
   protected capturas: Record<number, Captura[]> = {};
   protected notas: Record<number, string> = {};
   protected observacion: Record<number, string> = {};
@@ -160,6 +238,11 @@ export class SolicitudDetalle implements OnInit {
       ]);
       this.catalogo = catalogo;
       await this.cargar(solicitud);
+      // Datos de facturación propuestos: los del paciente (se pueden cambiar).
+      this.fact = { identificacion: solicitud.cedula, nombre: solicitud.paciente, direccion: '', email: '' };
+      const pago = this.ruta.snapshot.queryParamMap.get('pago');
+      if (pago === 'exito') this.aviso.set('Stripe recibió el pago. La solicitud se marca como pagada en cuanto llega su confirmación.');
+      if (pago === 'cancelado') this.error.set('El pago se canceló en Stripe. Puede generar otro cobro.');
     } catch (e) {
       this.error.set(mensajeError(e));
     }
@@ -177,7 +260,8 @@ export class SolicitudDetalle implements OnInit {
   }
 
   protected puedeProcesar(): boolean {
-    return ['PAGADA', 'EN_PROCESO'].includes(this.s()?.estado ?? '');
+    // El cobro de una consulta médica no lleva muestras ni resultados.
+    return this.s()?.tipo !== 'CONSULTA' && ['PAGADA', 'EN_PROCESO'].includes(this.s()?.estado ?? '');
   }
 
   protected cantidadResultados(): number {

@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../comun.dart';
@@ -31,39 +29,6 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
     }
   }
 
-  Future<void> _pagarConTransferencia() async {
-    setState(() => _procesando = true);
-    try {
-      final r = await api.post('/api/pagos/transferencia', {'solicitud_id': widget.id}) as Map<String, dynamic>;
-      if (!mounted) return;
-      final qr = base64Decode((r['qr'] as String).split(',').last);
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Pago por transferencia'),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Image.memory(qr, width: 220, height: 220),
-              Text('Monto: ${dinero(r['monto'])}', style: const TextStyle(fontWeight: FontWeight.bold)),
-              SelectableText('Referencia: ${r['referencia']}'),
-              const SizedBox(height: 8),
-              Text(r['cuenta'] as String, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13)),
-              const SizedBox(height: 8),
-              const Text('Escanee el código con su banca móvil o transfiera indicando la referencia. '
-                  'El laboratorio confirmará el pago y le avisará por correo.',
-                  textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12)),
-            ]),
-          ),
-          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Entendido'))],
-        ),
-      );
-    } catch (e) {
-      if (mounted) mostrarMensaje(context, '$e', error: true);
-    } finally {
-      if (mounted) setState(() => _procesando = false);
-    }
-  }
-
   Future<void> _documento(String ruta, String tipo, {String? nombre}) async {
     try {
       await api.abrirArchivo(ruta, tipo, nombre: nombre);
@@ -75,21 +40,24 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mis exámenes'), backgroundColor: verdeOscuro, foregroundColor: Colors.white),
+      appBar: AppBar(title: const Text('Detalle del pedido'), backgroundColor: verdeOscuro, foregroundColor: Colors.white),
       body: Centrado(
         child: Cargando<Map<String, dynamic>>(
           futuro: _s,
           reintentar: () => setState(() => _s = _cargar()),
           constructor: (s) {
             final examenes = (s['examenes'] as List).cast<Map<String, dynamic>>();
-            final conResultados = examenes.any((e) => e['resultado_id'] != null);
+            final consulta = s['tipo'] == 'CONSULTA';
+            final conResultados = !consulta && examenes.any((e) => e['resultado_id'] != null);
             return ListView(padding: const EdgeInsets.all(16), children: [
               Row(children: [
                 Expanded(child: Text(s['codigo'] as String, style: Theme.of(context).textTheme.headlineSmall)),
                 Etiqueta(s['estado'] as String?),
               ]),
-              Text('${fechaHora(s['created_at'])} · Total ${dinero(s['total'])}'
-                  '${s['medico_id'] != null ? ' · Ordenado por ${s['medico']}' : ''}'),
+              Text(consulta
+                  ? 'Consulta con Dr(a). ${s['medico']} · ${fechaHora(s['created_at'])}'
+                  : '${fechaHora(s['created_at'])} · Total ${dinero(s['total'])}'
+                      '${s['medico_id'] != null ? ' · Ordenado por ${s['medico']}' : ''}'),
               const SizedBox(height: 12),
               if (s['estado'] == 'REGISTRADA')
                 Card(
@@ -107,11 +75,8 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
                           icon: const Icon(Icons.credit_card),
                           label: const Text('Pagar con tarjeta'),
                         ),
-                        OutlinedButton.icon(
-                          onPressed: _procesando ? null : _pagarConTransferencia,
-                          icon: const Icon(Icons.qr_code),
-                          label: const Text('Transferencia con QR'),
-                        ),
+                        // De momento todo cobro pasa por la pasarela (Stripe); la transferencia simulada
+                        // queda solo en la API para las pruebas automáticas.
                       ]),
                       const SizedBox(height: 6),
                       const Text('El pago con tarjeta se procesa en la página segura de Stripe (modo de prueba).',
@@ -159,7 +124,7 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
                     label: const Text('Descargar resultados en PDF'),
                   ),
                 ),
-              for (final ex in examenes) _Examen(ex),
+              if (!consulta) for (final ex in examenes) _Examen(ex),
               if (['EN_PROCESO', 'COMPLETADA'].contains(s['estado'])) _Recetas(solicitudId: widget.id),
             ]);
           },
@@ -431,6 +396,7 @@ class ResumenPedido extends StatelessWidget {
   Widget build(BuildContext context) {
     final examenes = (s['examenes'] as List).cast<Map<String, dynamic>>().where((e) => e['estado'] != 'ANULADO').toList();
     final n = examenes.length;
+    final consulta = s['tipo'] == 'CONSULTA';
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(color: const Color(0xFFF1F1F1), borderRadius: BorderRadius.circular(6)),
@@ -438,13 +404,13 @@ class ResumenPedido extends StatelessWidget {
         const Text('RESUMEN DEL PEDIDO', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: .5)),
         const SizedBox(height: 8),
         for (final e in examenes) _fila(e['examen'] as String, dinero(e['precio_unitario'])),
-        if (s['cita_id'] != null) _fila('Cita para la toma de muestras', 'sin costo'),
+        if (s['cita_id'] != null && !consulta) _fila('Cita para la toma de muestras', 'sin costo'),
         const Divider(),
-        _fila('Subtotal ($n examen${n == 1 ? '' : 'es'}, sin IVA)', dinero(s['subtotal'])),
+        _fila(consulta ? 'Subtotal (consulta, sin IVA)' : 'Subtotal ($n examen${n == 1 ? '' : 'es'}, sin IVA)', dinero(s['subtotal'])),
         _fila('IVA ${s['iva_porcentaje']} %', dinero(s['iva'])),
         const Divider(),
         _fila('Total del pedido', dinero(s['total']), fuerte: true, tam: 18),
-        Text('(${s['iva_porcentaje']} % de IVA incluido en el precio de cada examen)',
+        Text('(${s['iva_porcentaje']} % de IVA incluido en el precio${consulta ? '' : ' de cada examen'})',
             style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ]),
     );

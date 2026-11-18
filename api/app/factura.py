@@ -49,7 +49,8 @@ def datos(solicitud_id: int) -> dict:
     if not s:
         raise no_encontrado("La solicitud")
     pago = db.leer_uno("""
-        SELECT pago_id, monto, metodo, estado, confirmado_at, referencia_transferencia
+        SELECT pago_id, monto, metodo, estado, confirmado_at, referencia_transferencia,
+               factura_identificacion, factura_nombre, factura_direccion, factura_email
         FROM {e}.pago WHERE solicitud_id = ? AND estado IN ('APROBADO', 'REEMBOLSO_PARCIAL', 'REEMBOLSADO')
         ORDER BY pago_id DESC OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY""", solicitud_id)
     if not pago:
@@ -58,6 +59,10 @@ def datos(solicitud_id: int) -> dict:
         SELECT t.codigo, t.nombre, d.precio_unitario
         FROM {e}.solicitud_detalle d JOIN {e}.tipo_examen t ON t.tipo_examen_id = d.tipo_examen_id
         WHERE d.solicitud_id = ? AND d.estado <> 'ANULADO' ORDER BY d.detalle_id""", solicitud_id)
+    # Cobro en ventanilla: la factura sale a nombre de quien dio sus datos (o consumidor final).
+    if pago["factura_identificacion"]:
+        s = {**s, "cedula": pago["factura_identificacion"], "nombres": "", "apellidos": pago["factura_nombre"] or "",
+             "direccion": pago["factura_direccion"], "email": pago["factura_email"] or s["email"]}
     for ln in lineas:
         ln["precio_con_iva"] = _d(ln["precio_unitario"])
         ln["base"] = base_sin_iva(ln["precio_unitario"])
@@ -107,8 +112,10 @@ def xml(f: dict) -> bytes:
     _sub(inf, "fechaEmision", f"{f['fecha']:%d/%m/%Y}")
     _sub(inf, "dirEstablecimiento", config.FACTURA_DIRECCION)
     _sub(inf, "obligadoContabilidad", "SI")
-    _sub(inf, "tipoIdentificacionComprador", "05" if len(s["cedula"]) == 10 else "04")
-    _sub(inf, "razonSocialComprador", f"{s['apellidos']} {s['nombres']}")
+    # Tabla 6 del SRI: 04 RUC, 05 cédula, 07 consumidor final.
+    tipo_id = "07" if s["cedula"] == "9999999999999" else "05" if len(s["cedula"]) == 10 else "04"
+    _sub(inf, "tipoIdentificacionComprador", tipo_id)
+    _sub(inf, "razonSocialComprador", f"{s['apellidos']} {s['nombres']}".strip())
     _sub(inf, "identificacionComprador", s["cedula"])
     _sub(inf, "direccionComprador", s["direccion"] or "S/N")
     _sub(inf, "totalSinImpuestos", f["subtotal"])

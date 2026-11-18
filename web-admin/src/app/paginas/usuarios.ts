@@ -1,5 +1,6 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { SoloLetras, SoloNumeros } from '../core/entrada';
 import { Api, mensajeError } from '../core/api';
 import { AuthService, NOMBRE_ROL, Rol } from '../core/auth';
 import { fechaHora } from '../core/formato';
@@ -8,7 +9,7 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
 
 @Component({
   selector: 'app-usuarios',
-  imports: [FormsModule, Paginador],
+  imports: [FormsModule, SoloNumeros, SoloLetras, Paginador],
   template: `
     <h1>Usuarios y roles</h1>
     <p class="sub">Una persona puede tener varios roles (por ejemplo, un médico que también es paciente).</p>
@@ -39,6 +40,14 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
                 <span [class]="u.activo ? 'badge' : 'badge rojo'">{{ u.activo ? 'activo' : 'inactivo' }}</span>
                 @if (u.usuario_id !== auth.usuario()?.usuario_id) {
                   <br /><button class="secundario chico" (click)="activar(u)">{{ u.activo ? 'Desactivar' : 'Activar' }}</button>
+                  <button class="secundario chico" (click)="editandoClave.set(editandoClave() === u.usuario_id ? null : u.usuario_id)">Restablecer clave</button>
+                  @if (editandoClave() === u.usuario_id) {
+                    <div class="fila mini clave">
+                      <input type="password" autocomplete="new-password" placeholder="Clave temporal" [(ngModel)]="claveNueva" />
+                      <button class="chico" [disabled]="claveNueva.length < 8" (click)="restablecer(u)">Guardar</button>
+                    </div>
+                    <small class="muted">Mínimo 8 caracteres con letras y números. Désela al usuario en persona.</small>
+                  }
                 }
               </td>
               <td>
@@ -62,14 +71,14 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
     <form class="card" (ngSubmit)="crear()">
       <h2>Crear usuario</h2>
       <div class="fila">
-        <div class="campo"><label>Cédula</label><input name="ce" [(ngModel)]="n.cedula" maxlength="10" required /></div>
-        <div class="campo"><label>Nombres</label><input name="no" [(ngModel)]="n.nombres" required /></div>
-        <div class="campo"><label>Apellidos</label><input name="ap" [(ngModel)]="n.apellidos" required /></div>
+        <div class="campo"><label>Cédula</label><input name="ce" soloNumeros [(ngModel)]="n.cedula" maxlength="10" required /></div>
+        <div class="campo"><label>Nombres</label><input name="no" soloLetras [(ngModel)]="n.nombres" required /></div>
+        <div class="campo"><label>Apellidos</label><input name="ap" soloLetras [(ngModel)]="n.apellidos" required /></div>
       </div>
       <div class="fila">
         <div class="campo"><label>Fecha de nacimiento</label><input type="date" name="fn" [(ngModel)]="n.fecha_nacimiento" required /></div>
-        <div class="campo"><label>Sexo</label><select name="se" [(ngModel)]="n.sexo"><option value="F">F</option><option value="M">M</option><option value="O">Otro</option></select></div>
-        <div class="campo"><label>Teléfono</label><input name="te" [(ngModel)]="n.telefono" /></div>
+        <div class="campo"><label>Sexo</label><select name="se" [(ngModel)]="n.sexo"><option value="F">Femenino</option><option value="M">Masculino</option><option value="O">Sin especificar</option></select></div>
+        <div class="campo"><label>Teléfono</label><input name="te" soloNumeros maxlength="10" [(ngModel)]="n.telefono" /></div>
       </div>
       <div class="fila">
         <div class="campo"><label>Correo</label><input type="email" name="em" [(ngModel)]="n.email" required /></div>
@@ -87,7 +96,7 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
       <small class="muted"> La cédula se valida con el dígito verificador. Contraseña: mínimo 8 caracteres con letras y números.</small>
     </form>
   `,
-  styles: `.mini { gap: 6px; flex-wrap: nowrap; } .mini input { width: 130px; } .badge { margin: 1px; }`,
+  styles: `.clave { margin-top: 6px; } .mini { gap: 6px; flex-wrap: nowrap; } .mini input { width: 130px; } .badge { margin: 1px; }`,
 })
 export class Usuarios implements OnInit {
   private readonly api = inject(Api);
@@ -122,6 +131,16 @@ export class Usuarios implements OnInit {
     } catch (e) {
       this.error.set(mensajeError(e));
     }
+  }
+
+  protected readonly editandoClave = signal<number | null>(null);
+  protected claveNueva = '';
+
+  async restablecer(u: UsuarioAdmin) {
+    await this.ejecutar(() => this.api.post(`/api/usuarios/${u.usuario_id}/clave`, { password: this.claveNueva }),
+      `Clave de ${u.nombre} restablecida; la cuenta queda desbloqueada.`);
+    this.claveNueva = '';
+    this.editandoClave.set(null);
   }
 
   async activar(u: UsuarioAdmin) {

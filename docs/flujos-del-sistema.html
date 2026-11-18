@@ -1,0 +1,356 @@
+<title>Flujos del laboratorio clínico</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna de lectura con índice fijo arriba; cada rol es una sección con su color del sistema. */
+:root {
+  --bg: #f6f8f7; --panel: #ffffff; --fg: #1b2a26; --muted: #5d6e69; --line: #d6e0dc;
+  --paciente: #0b6e4f; --medico: #1d5fa8; --lab: #6a3fa0; --admin: #37474f;
+  --ok: #0b6e4f; --warn: #9a6700; --bad: #b00020; --warn-bg: #fff4d6; --bad-bg: #fdecee; --ok-bg: #e6f2ee;
+  --f-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111816; --panel: #18211e; --fg: #e3ece8; --muted: #9aaba5; --line: #2c3a35;
+  --paciente: #4cc39a; --medico: #6ea8ec; --lab: #b18ae0; --admin: #9fb3bd;
+  --ok: #4cc39a; --warn: #e3b450; --bad: #ff7a8a; --warn-bg: #2e2612; --bad-bg: #331a1f; --ok-bg: #15302a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111816; --panel: #18211e; --fg: #e3ece8; --muted: #9aaba5; --line: #2c3a35;
+  --paciente: #4cc39a; --medico: #6ea8ec; --lab: #b18ae0; --admin: #9fb3bd;
+  --ok: #4cc39a; --warn: #e3b450; --bad: #ff7a8a; --warn-bg: #2e2612; --bad-bg: #331a1f; --ok-bg: #15302a; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px; }
+.envoltura { max-width: 1040px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; line-height: 1.2; }
+h1 { font-size: clamp(28px, 4.5vw, 40px); margin: 32px 0 8px; }
+h2 { font-size: 24px; margin: 0 0 6px; }
+h3 { font-size: 17px; margin: 22px 0 8px; }
+p { max-width: 68ch; }
+.sub { color: var(--muted); margin: 0 0 18px; }
+code, .mono { font-family: var(--f-mono); font-size: 13px; }
+
+nav.indice { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 6px; padding-block: 10px; margin-bottom: 8px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+nav.indice a { text-decoration: none; color: var(--fg); font-size: 13px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 20px; }
+nav.indice a:hover, nav.indice a:focus-visible { border-color: var(--fg); outline: none; }
+nav.indice a .punto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+
+section { padding-block: 28px; border-bottom: 1px solid var(--line); }
+section.rol { border-top: 4px solid var(--c); }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--c, var(--muted)); margin: 0 0 4px; }
+
+.roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
+.rolcard { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 6px; padding: 12px 14px; min-width: 0; }
+.rolcard strong { font-family: var(--f-display); font-size: 16px; }
+.rolcard p { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+
+.diagrama { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; overflow-x: auto; margin: 10px 0; }
+pre.mermaid { margin: 0; background: transparent; text-align: center; }
+
+.dos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 760px) { .dos { grid-template-columns: 1fr; } }
+ul.pasos { padding-left: 20px; margin: 6px 0; } ul.pasos li { margin: 3px 0; }
+
+.mejoras { display: grid; gap: 8px; margin: 8px 0; padding: 0; list-style: none; }
+.mejoras li { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; }
+.mejoras li b { font-weight: 600; }
+.mejoras li span.txt { color: var(--muted); font-size: 14px; grid-column: 2; }
+.pill { font-family: var(--f-mono); font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 10px; white-space: nowrap; text-transform: uppercase; letter-spacing: .04em; }
+.alta { background: var(--bad-bg); color: var(--bad); } .media { background: var(--warn-bg); color: var(--warn); } .baja { background: var(--ok-bg); color: var(--ok); }
+
+.tabla { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--f-mono); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+.nota { font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="envoltura">
+<header>
+  <p class="eyebrow">Plataforma distribuida · estado al 18-11-2026 (D1–D47)</p>
+  <h1>Flujos del laboratorio clínico</h1>
+  <p class="sub">Cómo recorre el sistema cada tipo de usuario, de principio a fin (consulta médica, toma de muestras, cobro en ventanilla por Stripe, motor de reglas y recetas), qué mejoras se implementaron y qué queda como opcional.</p>
+</header>
+
+<nav class="indice" aria-label="Secciones">
+  <a href="#general">Flujo general</a>
+  <a href="#paciente"><span class="punto" style="background:var(--paciente)"></span>Paciente</a>
+  <a href="#laboratorista"><span class="punto" style="background:var(--lab)"></span>Laboratorista</a>
+  <a href="#medico"><span class="punto" style="background:var(--medico)"></span>Médico</a>
+  <a href="#admin"><span class="punto" style="background:var(--admin)"></span>Administrador</a>
+  <a href="#estados">Estados</a>
+  <a href="#fallos">Si algo falla</a>
+  <a href="#mejoras">Mejoras (resueltas y opcionales)</a>
+</nav>
+
+<section id="general">
+  <p class="eyebrow">Visión de conjunto</p>
+  <h2>Flujo general</h2>
+  <p>Todos entran por un solo login (<code>/ingresar</code>). El paciente usa el portal (Flutter); el personal usa el sistema transaccional en <code>/admin</code> (Angular). Quien tiene varios roles elige con cuál entrar y puede cambiar sin volver a ingresar. Cada rol trabaja con su color y todo cobro pasa por la pasarela (Stripe).</p>
+  <div class="roles">
+    <div class="rolcard" style="--c:var(--paciente)"><strong>Paciente</strong><p>Portal verde. Reserva consulta médica o turno de muestras, paga por Stripe, ve resultados, factura y receta.</p></div>
+    <div class="rolcard" style="--c:var(--lab)"><strong>Laboratorista</strong><p>Portal morado. Agenda de muestras, registro y cobro en ventanilla (Stripe QR/pantalla), toma de muestras y resultados.</p></div>
+    <div class="rolcard" style="--c:var(--medico)"><strong>Médico</strong><p>Portal azul. Mis consultas del día, ordena exámenes, agenda control, recibe resultados por correo, responde sugerencias y receta.</p></div>
+    <div class="rolcard" style="--c:var(--admin)"><strong>Administrador</strong><p>Portal gris. Usuarios (y restablecer claves), agendas de laboratorio y médicos, catálogo, pagos, reembolsos, base de conocimientos, auditoría y reportes.</p></div>
+  </div>
+
+  <h3>Recorrido completo (con consulta médica o directo a laboratorio)</h3>
+  <div class="diagrama"><pre class="mermaid">
+flowchart LR
+  A([Paciente]) -->|No sabe qué exámenes| CM[Reserva consulta médica<br/>paga por Stripe]
+  CM --> AT[Médico atiende en /consulta/:id<br/>ordena exámenes + agenda control]
+  AT --> C[Solicitud de exámenes REGISTRADA]
+  A -->|Ya sabe qué exámenes| B[Reserva turno de muestras<br/>o acude a ventanilla]
+  B --> C
+  C --> D{Resumen del pedido<br/>subtotal + IVA}
+  D -->|Portal o Ventanilla QR| E[Stripe Checkout]
+  E --> G[Pago APROBADO<br/>solicitud PAGADA · cita CONFIRMADA]
+  G --> H[[Correo con factura<br/>PDF + XML]]
+  G --> I[Laboratorista toma muestra<br/>cita pasa a ATENDIDA]
+  I --> J[Registra resultados<br/>↑ ↓ – por valor]
+  J --> K[Motor de reglas<br/>sugiere diagnósticos CIE-10]
+  J --> L[[Correo con PDF al paciente<br/>y al médico que ordenó]]
+  K --> M[Médico revisa en el control:<br/>acepta / descarta]
+  M --> N[Receta sugerida<br/>editable + tratamiento]
+  N --> O([Paciente ve resultados,<br/>receta y tratamiento])
+  </pre></div>
+
+  <h3>Dónde corre cada cosa</h3>
+  <div class="diagrama"><pre class="mermaid">
+flowchart LR
+  U((Usuarios)) --> LB[Azure Load Balancer<br/>labclinico-uta.duckdns.org]
+  LB --> V1[VM1 · Nginx<br/>api1 · api2 · sync]
+  LB --> V2[VM2 · Nginx<br/>api3 · api4 · sync]
+  V1 & V2 --> SQL[(Azure SQL<br/>principal · 31 tablas)]
+  SQL -- Change Tracking --> SYNC{{Sincronizador líder<br/>sp_getapplock}}
+  SYNC --> SB[(Supabase<br/>réplica de lectura · 31 tablas)]
+  SYNC --> MG[(MongoDB Atlas<br/>auditoría · documentos · guías)]
+  V1 & V2 -. contingencia .-> SB
+  V1 & V2 --> ST[Stripe] & MJ[Mailjet]
+  </pre></div>
+</section>
+
+<section id="paciente" class="rol" style="--c:var(--paciente)">
+  <p class="eyebrow">Rol 1</p>
+  <h2>Paciente</h2>
+  <div class="dos">
+    <div>
+      <h3>Qué hace</h3>
+      <ul class="pasos">
+        <li>Crea su cuenta con cédula válida (solo los pacientes se registran solos).</li>
+        <li>Puede reservar una <b>Consulta médica</b> (elige el médico y su turno sin elegir exámenes, y la paga por Stripe) o un turno de <b>Toma de muestras</b> (30 minutos para pagar).</li>
+        <li>Si el médico le ordenó exámenes y le agendó una <b>cita de control</b>, ve el aviso y puede pagar el control hasta <b>2 horas antes</b> de la hora.</li>
+        <li>Ve el <b>resumen del pedido</b> (cada ítem, subtotal, IVA 15 % y total) y paga siempre por <b>Stripe Checkout</b>.</li>
+        <li>Una vez pagada una cita (<code>CONFIRMADA</code>), ya no aparece el botón de cancelarla.</li>
+        <li>Recibe la factura (PDF y XML) y el PDF de resultados por correo; ve sus valores con ↑ alto, ↓ bajo, – normal.</li>
+        <li>Ve la receta (izquierda) y sus indicaciones (derecha) y la baja en PDF; ve sus tratamientos y pagos.</li>
+      </ul>
+      <p class="nota">Pestañas: Mis citas · Mis exámenes · Tratamientos · Pagos, todas con buscador y páginas de 10.</p>
+    </div>
+    <div class="diagrama"><pre class="mermaid">
+flowchart TD
+  R[Registro / Ingreso] --> P[Panel]
+  P -->|Consulta médica| CM[Elige médico y turno<br/>Paga consulta en Stripe]
+  CM --> ORD[Médico ordena exámenes<br/>y agenda control]
+  ORD --> PG[Paga exámenes y control<br/>en Stripe]
+  P -->|Toma de muestras| C[Reserva turno + elige exámenes]
+  C --> PG
+  PG --> FA[[Factura PDF + XML por correo]]
+  PG --> RE[[Resultados PDF por correo]]
+  RE --> VR[Ver resultados · receta · tratamiento]
+    </pre></div>
+  </div>
+  <h3>Resuelto y mejoras opcionales</h3>
+  <ul class="mejoras">
+    <li><span class="pill baja">Resuelta</span><b>Consulta médica previa y control.</b><span class="txt">El paciente puede agendar consulta con un médico sin saber qué exámenes necesita; el médico le ordena los análisis y le agenda el control (D44, D45).</span></li>
+    <li><span class="pill baja">Resuelta</span><b>No cancelar citas ya pagadas.</b><span class="txt">El portal oculta el botón de cancelar en citas confirmadas y la API responde 409 si se intenta (D47).</span></li>
+    <li><span class="pill media">Media</span><b>Reprogramar una cita pagada.</b><span class="txt">Permitir cambiar de franja conservando el pago confirmado.</span></li>
+    <li><span class="pill baja">Baja</span><b>Recordatorio antes de la cita y verificación de correo.</b><span class="txt">Enviar aviso el día anterior con las indicaciones de ayuno.</span></li>
+  </ul>
+</section>
+
+<section id="laboratorista" class="rol" style="--c:var(--lab)">
+  <p class="eyebrow">Rol 2</p>
+  <h2>Laboratorista</h2>
+  <div class="dos">
+    <div>
+      <h3>Qué hace</h3>
+      <ul class="pasos">
+        <li>Inicio: citas de muestras de hoy y solicitudes de exámenes por procesar.</li>
+        <li><b>Agenda del día</b>: ve únicamente los turnos de toma de muestras (<code>MUESTRA</code>), con la solicitud y sus exámenes.</li>
+        <li><b>Ventanilla</b>: registra pacientes sin cuenta (<code>+ Registrar paciente de ventanilla</code>), crea la solicitud, toma los datos de factura (RUC/cédula o consumidor final <code>9999999999999</code>) y cobra por <b>Stripe</b> mostrando el QR para el celular del paciente o abriendo el pago en pantalla (sondeo automático cada 4 s).</li>
+        <li>Al confirmarse el pago, la factura PDF y XML sale con los datos tomados y el laboratorista puede descargarla.</li>
+        <li>Registra la toma de muestra: el turno vinculado pasa automáticamente a <b><code>ATENDIDA</code></b>.</li>
+        <li>Registra los valores por parámetro; el motor de reglas genera sugerencias CIE-10 y al completarse la solicitud salen los correos con el PDF al paciente y al médico que ordenó.</li>
+      </ul>
+    </div>
+    <div class="diagrama"><pre class="mermaid">
+flowchart TD
+  VEN[Paciente en ventanilla] --> REG[Registrar paciente + solicitud]
+  REG --> COB[Cobrar en ventanilla: datos de factura<br/>Stripe QR en celular o en pantalla]
+  COB --> PAG{¿Pagada?}
+  AG[Agenda de muestras] --> PAG
+  PAG -- Sí --> MU[Registrar muestra<br/>cita pasa a ATENDIDA]
+  MU --> RV[Registrar valores ↑ ↓ –]
+  RV --> MO[Motor de reglas CIE-10]
+  RV --> FIN{¿Todos los exámenes?}
+  FIN -- Sí --> CO[COMPLETADA<br/>correo al paciente y al médico]
+    </pre></div>
+  </div>
+  <h3>Resuelto y mejoras opcionales</h3>
+  <ul class="mejoras">
+    <li><span class="pill baja">Resuelta</span><b>Cobro en ventanilla por Stripe con datos de factura.</b><span class="txt">El laboratorista cobra solicitudes de pacientes sin cuenta mediante QR de Stripe o en pantalla y emite factura con RUC/cédula o consumidor final (D46).</span></li>
+    <li><span class="pill baja">Resuelta</span><b>Marcar asistencia automática.</b><span class="txt">Al registrar la toma de muestra, la cita vinculada pasa automáticamente a estado <code>ATENDIDA</code> (D47).</span></li>
+    <li><span class="pill media">Media</span><b>Validación por un segundo profesional o corrección de resultados.</b><span class="txt">Agregar un paso opcional de validación antes de publicar o enmienda con motivo auditado.</span></li>
+    <li><span class="pill baja">Baja</span><b>Etiqueta de la muestra.</b><span class="txt">Imprimir código QR o de barras para el tubo al tomar la muestra.</span></li>
+  </ul>
+</section>
+
+<section id="medico" class="rol" style="--c:var(--medico)">
+  <p class="eyebrow">Rol 3</p>
+  <h2>Médico</h2>
+  <div class="dos">
+    <div>
+      <h3>Qué hace</h3>
+      <ul class="pasos">
+        <li>Inicio: <b>Mis consultas de hoy</b>, <b>Resultados de mis pacientes</b> y tratamientos activos.</li>
+        <li><b>Agenda ("Mis consultas del día")</b>: ve únicamente las citas de consulta agendadas con él y las atiende con el botón "Atender" (<code>/consulta/:id</code>).</li>
+        <li>En <b><code>/consulta/:id</code></b>: revisa el historial y las alergias del paciente, le <b>ordena los exámenes</b> que necesita, le <b>agenda la cita de control</b> en su propia agenda y finaliza la consulta (la cita pasa a <code>ATENDIDA</code>).</li>
+        <li>Cuando el laboratorio completa los exámenes que él ordenó, <b>recibe por correo el PDF de resultados</b> (<code>RESULTADO_MEDICO</code>).</li>
+        <li>Revisa las <b>sugerencias de diagnóstico CIE-10</b>: acepta (creando el tratamiento con protocolo) o descarta con motivo.</li>
+        <li>Emite la <b>receta</b> asistida por el vademécum (medicamentos e indicaciones autocompletados y editables, con PDF).</li>
+      </ul>
+    </div>
+    <div class="diagrama"><pre class="mermaid">
+flowchart TD
+  AG[Mis consultas del día] --> AT[Atender en /consulta/:id<br/>ver historial y alergias]
+  AT --> OR[Ordenar exámenes +<br/>agendar cita de control]
+  OR --> FIN[Finalizar consulta · ATENDIDA]
+  FIN -. laboratorio completa .-> COR[[Recibe correo RESULTADO_MEDICO<br/>con PDF adjunto]]
+  COR --> RE[Revisar resultados ↑ ↓ –]
+  RE --> SG{Sugerencias CIE-10}
+  SG -- Acepta --> TR[Tratamiento con protocolo]
+  SG -- Descarta --> MO[Motivo · mide precisión]
+  RE --> RX[Receta sugerida · Guardar · PDF]
+    </pre></div>
+  </div>
+  <h3>Resuelto y mejoras opcionales</h3>
+  <ul class="mejoras">
+    <li><span class="pill baja">Resuelta</span><b>Agenda de consultas médicas y atención en <code>/consulta/:id</code>.</b><span class="txt">El médico atiende consultas, ordena exámenes y agenda controles en su propia agenda (D44, D45).</span></li>
+    <li><span class="pill baja">Resuelta</span><b>Aviso por correo al médico con el PDF de resultados.</b><span class="txt">Cuando se completan los exámenes ordenados por un médico, el sistema le envía <code>RESULTADO_MEDICO</code> con el PDF adjunto y los muestra en su inicio (D45).</span></li>
+    <li><span class="pill media">Media</span><b>Alerta automática de alergias al recetar.</b><span class="txt">Las alergias ya se muestran al médico en la consulta; se podría cruzar automáticamente contra el vademécum.</span></li>
+    <li><span class="pill baja">Baja</span><b>Enviar la receta por correo y comparar tendencias históricas.</b><span class="txt">Adjuntar el PDF de la receta por correo y graficar la evolución de un parámetro.</span></li>
+  </ul>
+</section>
+
+<section id="admin" class="rol" style="--c:var(--admin)">
+  <p class="eyebrow">Rol 4</p>
+  <h2>Administrador</h2>
+  <div class="dos">
+    <div>
+      <h3>Qué hace</h3>
+      <ul class="pasos">
+        <li>Crea usuarios del personal, agrega roles y <b>restablece contraseñas</b> (desbloqueando la cuenta).</li>
+        <li>Mantiene el catálogo de exámenes y genera las franjas eligiendo <b>"Agenda de"</b> el laboratorio o un médico específico.</li>
+        <li>Supervisa pagos, confirma transferencias de prueba y ejecuta reembolsos totales o parciales en Stripe.</li>
+        <li>Descarga facturas (PDF y XML) de cualquier solicitud pagada.</li>
+        <li>Mantiene la base de conocimientos: reglas, diagnósticos CIE-10 y vademécum de medicamentos.</li>
+        <li>Revisa la auditoría y la bandeja de correos con filtros, y los reportes de ingresos y exámenes.</li>
+      </ul>
+    </div>
+    <div class="diagrama"><pre class="mermaid">
+flowchart TD
+  US[Usuarios, roles y<br/>restablecer clave] --> PE[Personal y pacientes activos]
+  CA[Catálogo y franjas:<br/>laboratorio o médico] --> AGP[Agendas disponibles]
+  PA[Pagos y ventanilla] --> RF[Reembolsos · Facturas PDF/XML]
+  BC[Base de conocimientos] --> RG[Reglas · diagnósticos · medicamentos]
+  AU[Auditoría y correos] --> RP[Reportes]
+    </pre></div>
+  </div>
+  <h3>Resuelto y mejoras opcionales</h3>
+  <ul class="mejoras">
+    <li><span class="pill baja">Resuelta</span><b>Restablecer contraseñas desde Usuarios.</b><span class="txt">El administrador puede asignar una nueva clave a cualquier usuario desde la pantalla (D47).</span></li>
+    <li><span class="pill baja">Resuelta</span><b>Generar agenda por médico o de laboratorio.</b><span class="txt">El generador de franjas permite elegir si los turnos son para toma de muestras o para la consulta de un médico (D45).</span></li>
+    <li><span class="pill media">Media</span><b>Editar el precio de la consulta (<code>CONS-MED</code>) y de exámenes desde pantalla.</b><span class="txt">Hoy <code>CONS-MED</code> está en USD 25,00 por SQL; agregar edición de precio en el catálogo.</span></li>
+    <li><span class="pill baja">Baja</span><b>Reintentar correos fallidos y panel visual de salud de instancias.</b><span class="txt">Botón para reenviar correos que agotaron sus 5 intentos y vista de estado de <code>/api/estado</code>.</span></li>
+  </ul>
+</section>
+
+<section id="estados">
+  <p class="eyebrow">Ciclos de vida</p>
+  <h2>Estados de la cita, la solicitud y el pago</h2>
+  <div class="dos">
+    <div class="diagrama"><pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  [*] --> PENDIENTE_PAGO: reserva (muestra, consulta o control)
+  PENDIENTE_PAGO --> CONFIRMADA: pago aprobado
+  PENDIENTE_PAGO --> CANCELADA: 30 min sin pagar (o 2 h antes en control)
+  CONFIRMADA --> CANCELADA: solo admin
+  CONFIRMADA --> ATENDIDA: toma de muestra o cierre de consulta
+    </pre><p class="nota">Cita. El paciente no puede cancelar una cita CONFIRMADA (409). Pasa a ATENDIDA al registrar la muestra o cerrar la consulta.</p></div>
+    <div class="diagrama"><pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  [*] --> PENDIENTE: Stripe Checkout (portal o ventanilla QR)
+  PENDIENTE --> APROBADO
+  PENDIENTE --> RECHAZADO
+  PENDIENTE --> EXPIRADO: Stripe vence
+  APROBADO --> REEMBOLSO_PARCIAL
+  APROBADO --> REEMBOLSADO
+    </pre><p class="nota">Pago (incluye datos de factura o consumidor final)</p></div>
+  </div>
+  <div class="diagrama"><pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  [*] --> REGISTRADA: exámenes o consulta (CONS-MED)
+  REGISTRADA --> PAGADA: pago aprobado
+  PAGADA --> EN_PROCESO: primer resultado (exámenes)
+  PAGADA --> COMPLETADA: médico finaliza la consulta
+  EN_PROCESO --> COMPLETADA: todos los resultados
+  REGISTRADA --> ANULADA: cita de consulta cancelada sin pago
+  </pre><p class="nota">Solicitud (tipo EXAMENES o CONSULTA)</p></div>
+</section>
+
+<section id="fallos">
+  <p class="eyebrow">Tolerancia a fallos</p>
+  <h2>Si algo falla</h2>
+  <div class="tabla"><table>
+    <thead><tr><th>Qué se cae</th><th>Qué sigue funcionando</th><th>Qué se detiene</th></tr></thead>
+    <tbody>
+      <tr><td>Una VM</td><td>Todo, por la otra VM. El sincronizador de la otra toma el liderazgo en unos 38 s.</td><td>Nada visible.</td></tr>
+      <tr><td>Una instancia de API</td><td>Todo: Nginx reparte entre las otras.</td><td>Nada visible.</td></tr>
+      <tr><td>Azure SQL</td><td>Login, consultas, agendas, resultados, PDF, recetas y facturas desde Supabase (modo contingencia, con aviso en pantalla).</td><td>Reservas, pagos, registros y cualquier escritura (503).</td></tr>
+      <tr><td>Supabase</td><td>Todo, mientras Azure SQL esté arriba.</td><td>La contingencia.</td></tr>
+      <tr><td>MongoDB Atlas</td><td>Todo lo transaccional.</td><td>Guías clínicas y la copia de auditoría.</td></tr>
+      <tr><td>Stripe o Mailjet</td><td>Todo lo demás; los correos se reintentan hasta 5 veces.</td><td>Pago con tarjeta o el envío de correos.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="mejoras">
+  <p class="eyebrow">Estado de mejoras</p>
+  <h2>Mejoras implementadas el 18-11 y opcionales restantes</h2>
+  <p class="sub">Las mejoras de prioridad alta identificadas en la revisión del equipo ya fueron implementadas, desplegadas en las 2 VM y probadas (24/24).</p>
+  <div class="tabla"><table>
+    <thead><tr><th>Estado</th><th>Mejora</th><th>Rol</th><th>Implementación</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill baja">Resuelta</span></td><td>Consulta médica previa, orden de exámenes y agendamiento de control</td><td>Paciente / Médico</td><td>D44 y D45 (<code>09_consultas.sql</code>, <code>/consulta/:id</code>, vence 2 h antes)</td></tr>
+      <tr><td><span class="pill baja">Resuelta</span></td><td>Cobro en ventanilla por Stripe (QR o pantalla) con datos de factura o consumidor final</td><td>Laboratorista / Admin</td><td>D46 (<code>POST /api/pagos/ventanilla</code>, factura PDF/XML)</td></tr>
+      <tr><td><span class="pill baja">Resuelta</span></td><td>Restablecer contraseñas desde administración</td><td>Admin / Todos</td><td>D47 (<code>POST /api/usuarios/&lt;id&gt;/clave</code>)</td></tr>
+      <tr><td><span class="pill baja">Resuelta</span></td><td>Impedir que el paciente cancele una cita ya pagada</td><td>Paciente</td><td>D47 (409 en API y sin botón en el portal)</td></tr>
+      <tr><td><span class="pill baja">Resuelta</span></td><td>Aviso por correo al médico con el PDF de resultados listos</td><td>Médico</td><td>D45 (correo <code>RESULTADO_MEDICO</code> con PDF adjunto)</td></tr>
+      <tr><td><span class="pill baja">Resuelta</span></td><td>Marcar la cita como <code>ATENDIDA</code> al tomar la muestra o cerrar la consulta</td><td>Laboratorista / Médico</td><td>D47 (automático en toma de muestra y en <code>/atender</code>)</td></tr>
+      <tr><td><span class="pill media">Opcional</span></td><td>Pantalla para editar el precio de la consulta (<code>CONS-MED</code>) y de exámenes existentes</td><td>Admin</td><td>Esfuerzo bajo</td></tr>
+      <tr><td><span class="pill media">Opcional</span></td><td>Reprogramar citas ya pagadas sin perder el vínculo con el pago</td><td>Paciente / Admin</td><td>Esfuerzo bajo</td></tr>
+      <tr><td><span class="pill baja">Opcional</span></td><td>Alerta cruzada de alergias al recetar, tendencia histórica y etiqueta QR de muestra</td><td>Médico / Lab</td><td>Trabajo futuro</td></tr>
+    </tbody>
+  </table></div>
+</section>
+</div>

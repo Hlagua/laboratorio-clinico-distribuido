@@ -24,7 +24,7 @@ class _PanelState extends State<Panel> {
   Widget build(BuildContext context) {
     final paginas = [
       _Lista(key: ValueKey('c$_version'), ruta: '/api/citas/mias', vacio: 'Aún no tiene citas.', item: _itemCita),
-      _Lista(key: ValueKey('s$_version'), ruta: '/api/solicitudes/mias', vacio: 'Aún no tiene exámenes.', item: _itemSolicitud),
+      _Lista(key: ValueKey('s$_version'), ruta: '/api/solicitudes/mias?tipo=EXAMENES', vacio: 'Aún no tiene exámenes.', item: _itemSolicitud),
       _Lista(key: ValueKey('t$_version'), ruta: '/api/tratamientos/mios', vacio: 'No tiene tratamientos registrados.', item: _itemTratamiento),
       _Lista(key: ValueKey('p$_version'), ruta: '/api/pagos/mios', vacio: 'No tiene pagos.', item: _itemPago),
     ];
@@ -99,21 +99,33 @@ class _PanelState extends State<Panel> {
     final estado = c['estado'] as String?;
     final pendiente = estado == 'PENDIENTE_PAGO';
     final solicitudId = c['solicitud_id'] as int?;
+    final consulta = c['tipo'] == 'CONSULTA';
+    final control = c['origen'] == 'MEDICO';
+    // Las citas de control las agenda el médico y se pagan hasta 2 horas antes: se muestra la fecha completa.
+    final limite = control ? fechaHora(c['vence_at']) : 'las ${horaLocal(c['vence_at'])}';
     final textos = <String>[
-      c['motivo'] as String? ?? 'Sin motivo',
-      if (solicitudId != null) 'Exámenes ${c['solicitud_codigo']}: ${c['examenes_resumen'] ?? ''} · ${dinero(c['solicitud_total'])}',
+      consulta
+          ? '${control ? 'Control' : 'Consulta'} con Dr(a). ${c['medico']} (${c['especialidad']})'
+          : 'Toma de muestras en el laboratorio',
+      if (c['motivo'] != null) c['motivo'] as String,
+      if (solicitudId != null && !consulta)
+        'Exámenes ${c['solicitud_codigo']}: ${c['examenes_resumen'] ?? ''} · ${dinero(c['solicitud_total'])}',
+      if (solicitudId != null && consulta) 'Consulta ${c['solicitud_codigo']} · ${dinero(c['solicitud_total'])}',
     ];
     return Card(
       child: Padding(
         padding: const EdgeInsets.only(bottom: 4),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           ListTile(
-            leading: const Icon(Icons.event, color: verde),
+            leading: Icon(consulta ? Icons.medical_services : Icons.biotech, color: verde),
+            // Tocar la cita abre su detalle: el pedido, el pago y la factura (o los exámenes vinculados).
+            onTap: solicitudId == null ? null : () => _abrirSolicitud(solicitudId),
             title: Text('${fechaLarga(c['fecha'] as String)} · ${hora(c['hora_inicio'])}'),
             subtitle: Text(textos.join('\n')),
             trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
               Etiqueta(estado),
-              if (pendiente || estado == 'CONFIRMADA')
+              // Una cita pagada no se cancela desde aquí: la reprograma o reembolsa el laboratorio.
+              if (pendiente)
                 IconButton(tooltip: 'Cancelar cita', icon: const Icon(Icons.close), onPressed: () => _cancelar(c)),
             ]),
           ),
@@ -123,13 +135,17 @@ class _PanelState extends State<Panel> {
               child: Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 Text(
                   solicitudId == null
-                      ? 'Para confirmarla elija sus exámenes y páguelos antes de las ${horaLocal(c['vence_at'])}.'
-                      : 'Pague los exámenes antes de las ${horaLocal(c['vence_at'])} para confirmar la cita.',
+                      ? 'Para confirmarla elija sus exámenes y páguelos antes de $limite.'
+                      : 'Pague ${consulta ? 'la consulta' : 'los exámenes'} antes de $limite para confirmar la cita.',
                   style: const TextStyle(color: ambar, fontSize: 13),
                 ),
                 FilledButton.icon(
                   icon: Icon(solicitudId == null ? Icons.biotech : Icons.payment),
-                  label: Text(solicitudId == null ? 'Elegir exámenes y pagar' : 'Pagar ${c['solicitud_codigo']}'),
+                  label: Text(solicitudId == null
+                      ? 'Elegir exámenes y pagar'
+                      : consulta
+                          ? 'Pagar la consulta'
+                          : 'Pagar ${c['solicitud_codigo']}'),
                   onPressed: () async {
                     await Navigator.push(
                         context,
@@ -142,7 +158,13 @@ class _PanelState extends State<Panel> {
                 ),
               ]),
             )
-          else if (solicitudId != null && estado == 'CONFIRMADA')
+          else if (estado == 'CONFIRMADA')
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text('Cita pagada. Para reprogramarla o cancelarla, comuníquese con el laboratorio.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12)),
+            ),
+          if (solicitudId != null && estado == 'CONFIRMADA' && !consulta)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: OutlinedButton.icon(
@@ -157,6 +179,11 @@ class _PanelState extends State<Panel> {
         ]),
       ),
     );
+  }
+
+  Future<void> _abrirSolicitud(int id) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => DetalleSolicitud(id: id)));
+    _recargar();
   }
 
   Future<void> _cancelar(Map<String, dynamic> c) async {
@@ -222,7 +249,12 @@ class _PanelState extends State<Panel> {
             if (p['motivo_rechazo'] != null) p['motivo_rechazo'],
             if ((p['monto_reembolsado'] as num) > 0) 'Reembolsado ${dinero(p['monto_reembolsado'])}',
           ].join(' · ')),
-          trailing: Etiqueta(p['estado'] as String?),
+          trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 4, children: [
+            Etiqueta(p['estado'] as String?),
+            const Icon(Icons.chevron_right, color: Colors.grey),
+          ]),
+          // Tocar el pago abre el detalle del pedido con su factura (PDF y XML).
+          onTap: () => _abrirSolicitud(p['solicitud_id'] as int),
         ),
       );
 }

@@ -33,6 +33,10 @@ _HTTP_POR_CODIGO = {
     50051: 404, 50052: 409, 50053: 409, 50055: 403, 50060: 403, 50061: 403, 50062: 403,
     # base de conocimientos (07_base_conocimiento.sql)
     50080: 422, 50081: 404, 50082: 404, 50083: 409, 50084: 422, 50085: 403, 50086: 403, 50087: 422, 50088: 422,
+    # recetas (08_recetas.sql)
+    50090: 422, 50091: 422, 50092: 422, 50093: 404, 50094: 409, 50095: 403, 50096: 422,
+    # consultas y ventanilla (09_consultas.sql)
+    50100: 422, 50101: 503, 50102: 422, 50103: 403, 50104: 403, 50105: 403, 50106: 409,
 }
 _PATRON_CODIGO = re.compile(r"\((5\d{4})\)")
 _PATRON_MENSAJE = re.compile(r"\[SQL Server\](.*?)\s*\(\d+\)\s*\(SQL", re.S)
@@ -42,7 +46,7 @@ def desde_sql(e: pyodbc.Error) -> ApiError | None:
     """Convierte un error de negocio (THROW 50xxx) o de integridad en ApiError."""
     texto = str(e)
     m = _PATRON_CODIGO.search(texto)
-    if m and 50000 <= int(m.group(1)) < 50100:
+    if m and 50000 <= int(m.group(1)) < 50200:
         codigo = int(m.group(1))
         mensaje = _PATRON_MENSAJE.search(texto)
         return ApiError(mensaje.group(1).strip() if mensaje else "Operación rechazada.",

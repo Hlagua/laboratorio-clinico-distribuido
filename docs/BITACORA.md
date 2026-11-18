@@ -93,6 +93,10 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D41 | **Precios con IVA incluido** y desglose al final (subtotal, IVA, total). Factura en PDF y XML con la estructura del SRI | No cambia lo que se cobra ni el esquema de la base. Se muestra lo que se compra antes de pagar y se entrega la factura por correo. | Sumar el IVA encima del precio, lo que cambia todos los totales y el procedimiento `sp_crear_solicitud` |
 | D42 | Adjuntos del correo **generados al enviar**, buscando la solicitud por el código del asunto | No hace falta una columna nueva en `notificacion`, que también se replica a Supabase. Si el documento falla, el correo sale igual. | Columna `solicitud_id` en `notificacion` (cambio de esquema en las 2 bases) |
 | D43 | **Receta sugerida por la base de conocimientos**, editable por el médico. Vademécum en Azure SQL (`medicamento`, `diagnostico_medicamento`) | Recetar parte de lo que ya sugieren las reglas (diagnóstico → medicamentos → indicaciones). Se guarda la receta del médico y si modificó la sugerencia, lo que permite medir cuánto se usa. Formato habitual: receta a la izquierda, indicaciones a la derecha. | Vademécum en MongoDB (no se replica a Supabase ni tiene integridad referencial con la receta); autocompletar con IA |
+| D44 | **Consulta médica con cobro por Stripe** (`solicitud_examen.tipo = 'CONSULTA'` con el ítem `CONS-MED` del catálogo, inactivo, USD 25,00) | Permite que el paciente reserve y pague una consulta con un médico sin elegir exámenes (no sabe cuáles necesita). Al estar inactivo `CONS-MED`, no se mezcla con los exámenes de laboratorio y reutiliza todo el circuito de pago, webhook y facturación. | Tabla de cobros separada para consultas |
+| D45 | **Agenda por médico** (`franja_horaria.medico_id`, NULL = laboratorio) y **control agendado por el médico** (`origen = 'MEDICO'`, vence 2 h antes de la hora) | Separa los turnos del laboratorio de los turnos de cada médico. Revierte en parte D36: el médico ahora ve la agenda, pero únicamente con **sus** consultas. La cita de control la agenda el médico desde la consulta y el paciente tiene hasta 2 h antes para pagarla. | Una sola agenda compartida; vencimiento de 30 min también para el control |
+| D46 | **Cobro en ventanilla solo por la pasarela (Stripe Checkout)**, con QR para el celular o pago en pantalla, y datos de factura en el pago (`pago.factura_*` o consumidor final `9999999999999`) | Resuelve el cobro de pacientes de ventanilla sin cuenta y permite facturar a un tercero (RUC/cédula o consumidor final código 07). Se quitó del portal el botón de transferencia manual para que todo cobro de usuario pase por la pasarela. | Pago en efectivo sin pasarela; datos de factura solo en el perfil del paciente |
+| D47 | **Reglas operativas de citas y usuarios**: el paciente no cancela una cita pagada (409); la cita pasa a `ATENDIDA` al tomar la muestra o finalizar la consulta; el administrador restablece claves | Evita que una cita pagada quede cancelada sin gestión de reembolso, da uso real al estado `ATENDIDA` del modelo y permite recuperar el acceso de cualquier usuario desde administración. | Cancelación libre de citas confirmadas; estado `ATENDIDA` manual |
 
 ## 5. Registro cronológico
 
@@ -380,6 +384,26 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 - **API y pantallas:** sistema del personal (panel de receta debajo de los resultados y vademécum en Base de conocimientos), portal del paciente (receta en dos columnas y PDF) y PDF horizontal con el formato habitual.
 - **Pruebas:** receta 11/11, consultas en Supabase OK y réplica CONSISTENTE en 31 tablas (versión 571). Quedó de dato de prueba la receta de la SOL-2026-000018 (Sofía).
 - No se probó en el navegador el panel del médico: hay que ingresar con contraseña en el sitio publicado. Queda para el equipo.
+
+### 2026-11-18 — Consulta médica, control y cobro en ventanilla (D44–D47)
+- **Base de datos:**
+  - `database/supabase/05_consultas.sql` y `database/azure-sql/09_consultas.sql`: agregan `franja_horaria.medico_id` (NULL = laboratorio, índice único por fecha, hora y médico), `cita.tipo` (`MUESTRA` | `CONSULTA`), `cita.medico_id`, `cita.origen` (`PACIENTE` | `MEDICO`), `solicitud_examen.tipo` (`EXAMENES` | `CONSULTA`), las columnas `pago.factura_*` (identificación, nombre, dirección, correo) y el ítem `CONS-MED` (USD 25,00, inactivo en el catálogo de exámenes).
+  - Procedimientos nuevos: `sp_reservar_consulta` y `sp_atender_cita`. Redefinidos: `sp_cancelar_cita` (anula el cobro de una consulta no pagada), `sp_expirar_citas_pendientes` (la cita de control vence 2 h antes de la hora) y `sp_crear_pago` (datos de factura).
+  - **Orden de ejecución:** primero Supabase, luego Azure SQL y al final reiniciar `sync-vm1` y `sync-vm2` para que lean las columnas nuevas.
+- **API:**
+  - `citas.py`: `GET /api/citas/medicos`, `GET /api/citas/franjas?medico_id=`, `POST /api/citas` con `tipo`, `POST /api/citas/control` (médico), `GET /api/citas/<id>`, `POST /api/citas/<id>/atender`; el médico ve en la agenda solo sus consultas; el paciente recibe 409 si intenta cancelar una cita `CONFIRMADA`.
+  - `examenes.py`: filtro `?tipo=` (el laboratorista ve solo `EXAMENES`); la toma de muestra marca la cita como `ATENDIDA`; correos `RESULTADO_MEDICO` (con el PDF adjunto al médico que ordenó los exámenes) y `EXAMENES_ORDENADOS` al paciente.
+  - `pagos.py` y `factura.py`: `POST /api/pagos/ventanilla` (laboratorista y administrador) genera `checkout_url` de Stripe y QR con los datos de factura o consumidor final `9999999999999` (código 07); el laboratorista puede descargar facturas.
+  - `usuarios.py`: `POST /api/pacientes` (paciente de ventanilla sin cuenta) y `POST /api/usuarios/<id>/clave` (restablecimiento por el administrador).
+- **Frontends desplegados en las 2 VM:**
+  - **Flutter Web (portal):** reserva de "Consulta médica" (elección de médico, turno y pago por Stripe) o "Toma de muestras"; visualización de fecha límite de pago del control; se quitó el botón de cancelar citas pagadas y el botón de transferencia manual (todo cobro va por Stripe).
+  - **Angular (sistema del personal):** "Mis consultas del día" para el médico y página `/consulta/:id` (historial, alergias, orden de exámenes, agendamiento de control en su propia agenda y cierre de consulta); registro de paciente de ventanilla y panel "Cobrar en ventanilla" con QR de Stripe, datos de factura y sondeo cada 4 s; botón "Restablecer clave" en Usuarios.
+- **Pruebas en el dominio público:**
+  - `pruebas/flujo_consulta.py`: **24/24** verificaciones correctas.
+  - Regresión: receta **11/11**, factura **10/10** y flujo de cita **6/6**.
+  - Réplica en Supabase: **31/31 tablas consistentes**.
+  - Reglas de red actualizadas a la IP actual del equipo en `lab-vm2-nsg/SSH-solo-equipo` y en el firewall de Azure SQL (`henry-pc-actual`).
+- **VM apagadas:** verificado en Azure que `ad-2026` y `lab-vm2` quedaron en estado `VM deallocated`.
 
 ## 6. Pendientes
 

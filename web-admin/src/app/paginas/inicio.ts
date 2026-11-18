@@ -37,30 +37,39 @@ export class Inicio implements OnInit {
 
   async ngOnInit() {
     try {
-      const [pagadas, enProceso] = await Promise.all([
-        this.api.get<SolicitudResumen[]>('/api/solicitudes', { estado: 'PAGADA' }),
-        this.api.get<SolicitudResumen[]>('/api/solicitudes', { estado: 'EN_PROCESO' }),
+      // Todas las consultas en paralelo: antes se hacían una tras otra y "Cargando indicadores…" tardaba.
+      const medico = this.auth.tiene('MEDICO');
+      const [pagadas, enProceso, agenda, listos, trat, pendientes] = await Promise.all([
+        this.api.get<SolicitudResumen[]>('/api/solicitudes', { estado: 'PAGADA', tipo: 'EXAMENES' }),
+        this.api.get<SolicitudResumen[]>('/api/solicitudes', { estado: 'EN_PROCESO', tipo: 'EXAMENES' }),
+        this.api.get<Cita[]>('/api/citas/agenda', { fecha: hoyIso() }),
+        medico ? this.api.get<SolicitudResumen[]>('/api/solicitudes', { estado: 'COMPLETADA', propias: 1, tipo: 'EXAMENES' })
+          : Promise.resolve([]),
+        this.auth.tiene('MEDICO', 'ADMIN') ? this.api.get<Tratamiento[]>('/api/tratamientos') : Promise.resolve([]),
+        this.auth.tiene('ADMIN') ? this.api.get<unknown[]>('/api/pagos', { estado: 'PENDIENTE' }) : Promise.resolve([]),
       ]);
-      const lista: Indicador[] = [];
-      // La agenda son turnos de toma de muestras: la ven el laboratorio y la administración.
-      if (this.auth.tiene('LABORATORISTA', 'ADMIN')) {
-        const agenda = await this.api.get<Cita[]>('/api/citas/agenda', { fecha: hoyIso() });
-        lista.push({ titulo: 'Citas de hoy', valor: agenda.length, detalle: 'Turnos de toma de muestras', ruta: '/agenda' });
+      const lista: Indicador[] = [{
+        titulo: medico ? 'Mis consultas de hoy' : 'Citas de hoy', valor: agenda.length,
+        detalle: medico ? 'Pacientes por atender' : this.auth.tiene('LABORATORISTA') ? 'Turnos de toma de muestras'
+          : 'Consultas y tomas de muestras', ruta: '/agenda',
+      }];
+      if (medico) {
+        lista.push({ titulo: 'Resultados de mis pacientes', valor: listos.length, detalle: 'Exámenes que ordenó, ya completos',
+          ruta: '/solicitudes' });
       }
       lista.push({ titulo: 'Solicitudes por procesar', valor: pagadas.length + enProceso.length,
         detalle: `${pagadas.length} pagadas · ${enProceso.length} en proceso`, ruta: '/solicitudes' });
       if (this.auth.tiene('MEDICO', 'ADMIN')) {
-        const trat = await this.api.get<Tratamiento[]>('/api/tratamientos');
-        lista.push({ titulo: this.auth.tiene('MEDICO') ? 'Mis tratamientos activos' : 'Tratamientos activos',
+        lista.push({ titulo: medico ? 'Mis tratamientos activos' : 'Tratamientos activos',
           valor: trat.filter((t) => t.estado === 'ACTIVO').length, detalle: 'Seguimiento médico', ruta: '/pacientes' });
       }
       if (this.auth.tiene('ADMIN')) {
-        const pendientes = await this.api.get<unknown[]>('/api/pagos', { estado: 'PENDIENTE' });
-        lista.push({ titulo: 'Pagos pendientes', valor: pendientes.length, detalle: 'Stripe y transferencias', ruta: '/pagos' });
+        lista.push({ titulo: 'Pagos pendientes', valor: pendientes.length, detalle: 'Pagos con Stripe sin confirmar', ruta: '/pagos' });
       }
       this.indicadores.set(lista);
     } catch (e) {
       this.error.set(mensajeError(e));
     }
   }
+
 }

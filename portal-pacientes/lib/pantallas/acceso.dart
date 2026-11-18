@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api.dart';
 import '../comun.dart';
@@ -20,8 +21,14 @@ class Acceso extends StatefulWidget {
 class _AccesoState extends State<Acceso> {
   final _form = GlobalKey<FormState>();
   final _c = <String, TextEditingController>{
-    for (final k in ['cedula', 'nombres', 'apellidos', 'telefono', 'email', 'password']) k: TextEditingController(),
+    for (final k in ['cedula', 'nombres', 'apellidos', 'telefono', 'email', 'password', 'confirmar']) k: TextEditingController(),
   };
+  bool _verClave = false;
+  bool _verConfirmacion = false;
+
+  // Controles de escritura: solo dígitos en cédula y teléfono; solo letras (con tildes) y espacios en los nombres.
+  static final _soloDigitos = FilteringTextInputFormatter.digitsOnly;
+  static final _soloLetras = FilteringTextInputFormatter.allow(RegExp(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' ]"));
   DateTime? _nacimiento;
   String _sexo = 'F';
   bool _enviando = false;
@@ -65,6 +72,14 @@ class _AccesoState extends State<Acceso> {
 
   String? _requerido(String? v) => (v == null || v.trim().isEmpty) ? 'Obligatorio' : null;
 
+  /// Misma regla que la API: al menos 8 caracteres, con letras y números.
+  String? _clave(String? v) {
+    final c = v ?? '';
+    if (c.length < 8) return 'Mínimo 8 caracteres';
+    if (!RegExp(r'[A-Za-zÁÉÍÓÚÑáéíóúñ]').hasMatch(c) || !RegExp(r'\d').hasMatch(c)) return 'Use letras y números';
+    return null;
+  }
+
   String? _cedula(String? v) {
     final c = (v ?? '').trim();
     if (!RegExp(r'^\d{10}$').hasMatch(c)) return 'La cédula tiene 10 dígitos';
@@ -104,13 +119,32 @@ class _AccesoState extends State<Acceso> {
                     ),
                     const SizedBox(height: 16),
                     if (reg) ...[
-                      TextFormField(controller: _c['cedula'], decoration: const InputDecoration(labelText: 'Cédula'),
-                          keyboardType: TextInputType.number, validator: _cedula),
+                      TextFormField(
+                          controller: _c['cedula'],
+                          decoration: const InputDecoration(labelText: 'Cédula', counterText: ''),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [_soloDigitos, LengthLimitingTextInputFormatter(10)],
+                          maxLength: 10,
+                          validator: _cedula),
                       const SizedBox(height: 12),
                       Row(children: [
-                        Expanded(child: TextFormField(controller: _c['nombres'], decoration: const InputDecoration(labelText: 'Nombres'), validator: _requerido)),
+                        Expanded(
+                            child: TextFormField(
+                                controller: _c['nombres'],
+                                decoration: const InputDecoration(labelText: 'Nombres', counterText: ''),
+                                inputFormatters: [_soloLetras, LengthLimitingTextInputFormatter(50)],
+                                maxLength: 50,
+                                textCapitalization: TextCapitalization.words,
+                                validator: _requerido)),
                         const SizedBox(width: 12),
-                        Expanded(child: TextFormField(controller: _c['apellidos'], decoration: const InputDecoration(labelText: 'Apellidos'), validator: _requerido)),
+                        Expanded(
+                            child: TextFormField(
+                                controller: _c['apellidos'],
+                                decoration: const InputDecoration(labelText: 'Apellidos', counterText: ''),
+                                inputFormatters: [_soloLetras, LengthLimitingTextInputFormatter(50)],
+                                maxLength: 50,
+                                textCapitalization: TextCapitalization.words,
+                                validator: _requerido)),
                       ]),
                       const SizedBox(height: 12),
                       Row(children: [
@@ -138,12 +172,20 @@ class _AccesoState extends State<Acceso> {
                           dropdownMenuEntries: const [
                             DropdownMenuEntry(value: 'F', label: 'Femenino'),
                             DropdownMenuEntry(value: 'M', label: 'Masculino'),
-                            DropdownMenuEntry(value: 'O', label: 'Otro'),
+                            DropdownMenuEntry(value: 'O', label: 'Sin especificar'),
                           ],
                         ),
                       ]),
                       const SizedBox(height: 12),
-                      TextFormField(controller: _c['telefono'], decoration: const InputDecoration(labelText: 'Teléfono (opcional)')),
+                      TextFormField(
+                          controller: _c['telefono'],
+                          decoration: const InputDecoration(labelText: 'Teléfono (opcional)', hintText: '0991234567', counterText: ''),
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [_soloDigitos, LengthLimitingTextInputFormatter(10)],
+                          maxLength: 10,
+                          validator: (v) => (v ?? '').isEmpty || RegExp(r'^0\d{8,9}$').hasMatch(v!)
+                              ? null
+                              : 'Entre 9 y 10 dígitos, empezando con 0'),
                       const SizedBox(height: 12),
                     ],
                     TextFormField(
@@ -151,17 +193,46 @@ class _AccesoState extends State<Acceso> {
                       decoration: const InputDecoration(labelText: 'Correo electrónico'),
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: const [AutofillHints.email],
-                      validator: (v) => (v ?? '').contains('@') ? null : 'Correo no válido',
+                      inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s')), LengthLimitingTextInputFormatter(150)],
+                      validator: (v) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v ?? '') ? null : 'Correo no válido',
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _c['password'],
-                      decoration: InputDecoration(labelText: 'Contraseña', helperText: reg ? 'Mínimo 8 caracteres con letras y números' : null),
-                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña',
+                        helperText: reg ? 'Mínimo 8 caracteres con letras y números' : null,
+                        suffixIcon: IconButton(
+                          tooltip: _verClave ? 'Ocultar contraseña' : 'Ver contraseña',
+                          icon: Icon(_verClave ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () => setState(() => _verClave = !_verClave),
+                        ),
+                      ),
+                      obscureText: !_verClave,
+                      inputFormatters: [LengthLimitingTextInputFormatter(72)],
                       autofillHints: [reg ? AutofillHints.newPassword : AutofillHints.password],
-                      validator: (v) => reg && ((v ?? '').length < 8) ? 'Mínimo 8 caracteres' : _requerido(v),
-                      onFieldSubmitted: (_) => _enviar(),
+                      validator: (v) => reg ? _clave(v) : _requerido(v),
+                      onFieldSubmitted: (_) => reg ? null : _enviar(),
                     ),
+                    if (reg) ...[
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _c['confirmar'],
+                        decoration: InputDecoration(
+                          labelText: 'Repita la contraseña',
+                          suffixIcon: IconButton(
+                            tooltip: _verConfirmacion ? 'Ocultar contraseña' : 'Ver contraseña',
+                            icon: Icon(_verConfirmacion ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () => setState(() => _verConfirmacion = !_verConfirmacion),
+                          ),
+                        ),
+                        obscureText: !_verConfirmacion,
+                        inputFormatters: [LengthLimitingTextInputFormatter(72)],
+                        autofillHints: const [AutofillHints.newPassword],
+                        validator: (v) => v == _c['password']!.text ? null : 'Las contraseñas no coinciden',
+                        onFieldSubmitted: (_) => _enviar(),
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     FilledButton(
                       onPressed: _enviando ? null : _enviar,

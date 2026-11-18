@@ -16,7 +16,7 @@ Proyecto final integrador de **Aplicaciones Distribuidas** (UTA). Integra las un
 | Si quiere ver… | Abra |
 |---|---|
 | El informe completo (investigación, diseño, resultados y conclusiones) | [docs/00-informe-tecnico.md](docs/00-informe-tecnico.md) |
-| **Qué se decidió y por qué** (decisiones D1–D43, cronología, hallazgos) | [docs/BITACORA.md](docs/BITACORA.md) |
+| **Qué se decidió y por qué** (decisiones D1–D47, cronología, hallazgos) | [docs/BITACORA.md](docs/BITACORA.md) |
 | Fase I: análisis de requerimientos, actores y casos de uso | [docs/01-analisis-requerimientos.md](docs/01-analisis-requerimientos.md) |
 | Fases II y III: arquitectura, modelo ER, normalización y replicación | [docs/02-arquitectura-y-datos.md](docs/02-arquitectura-y-datos.md) |
 | Diccionario de datos (generado desde la base) | [docs/03-diccionario-datos.md](docs/03-diccionario-datos.md) |
@@ -66,34 +66,34 @@ Las salidas completas de cada prueba (JSON, CSV de Locust, el PDF del flujo comp
 | Criterio | Evidencia |
 |---|---|
 | 1. Análisis y diseño | `docs/01`, `docs/02`, `docs/03`, diagrama de arquitectura |
-| 2. Bases de datos y replicación | `database/`, `sync-worker/`; réplica verificada 27/27 tablas y 5/5 colecciones; ponerse al día tras apagarse, incluidos los borrados |
+| 2. Bases de datos y replicación | `database/`, `sync-worker/`; réplica verificada 31/31 tablas y 5/5 colecciones; ponerse al día tras apagarse, incluidos los borrados |
 | 3. Infraestructura y alta disponibilidad | `infra/`; 2 VM, 4 APIs, Azure Load Balancer con sonda; caída de una API (16/16) y de una VM (131/133) |
 | 4. REST, SOAP y concurrencia | `api/`, `clientes/soap_cliente.py`; reservas simultáneas: sin protección 6 citas en 3 cupos, con protección 3 + 3 rechazadas |
-| 5. Aplicaciones web y servicios externos | `portal-pacientes/` (Flutter), `web-admin/` (Angular), Stripe (sandbox), Mailjet, PDF |
+| 5. Aplicaciones web y servicios externos | `portal-pacientes/` (Flutter), `web-admin/` (Angular), Stripe (sandbox, portal y ventanilla con QR), Mailjet (con factura PDF/XML y resultados PDF adjuntos), PDF |
 | 6. Seguridad y acceso público | DuckDNS + Let's Encrypt, JWT y roles, limitador, credenciales fuera del código; `pruebas/seguridad.py` 17/17 |
-| 7. Pruebas experimentales | `pruebas/` y `docs/05`: 1 frente a 4 APIs, caída de Azure SQL, réplica y flujo completo (15/15) |
-| Extra: base de conocimientos | `docs/06`; reglas en Azure SQL replicadas a Supabase, guías en MongoDB; `pruebas/base_conocimiento.py` 18/18 |
+| 7. Pruebas experimentales | `pruebas/` y `docs/05`: 1 frente a 4 APIs, caída de Azure SQL, réplica, flujo completo (15/15) y flujo de consulta y ventanilla (`pruebas/flujo_consulta.py` 24/24) |
+| Extra: base de conocimientos y recetas | `docs/06`; reglas CIE-10 y vademécum en Azure SQL replicados a Supabase, guías en MongoDB; `pruebas/base_conocimiento.py` 18/18 |
 | 8. Documentación y defensa | Este repositorio, el informe y la bitácora |
 
 ## Estructura
 
 ```
-api/               APIs Flask (REST + SOAP, Stripe, Mailjet, PDF) + Dockerfile
+api/               APIs Flask (REST + SOAP, Stripe, Mailjet, factura PDF/XML, PDF) + Dockerfile
 sync-worker/       sincronizador Azure SQL -> Supabase + MongoDB (Change Tracking)
-database/          scripts de Azure SQL (01–07), Supabase y MongoDB
-infra/             docker-compose.yml, Nginx, certificado, generar_env.py, vms.ps1
+database/          scripts de Azure SQL (01–09), Supabase (01–05) y MongoDB
+infra/             docker-compose.yml, Nginx, certificado, generar_env.py, desplegar.sh, vms.ps1
 web-admin/         Angular 22 · sistema transaccional
 portal-pacientes/  Flutter 3.47 · portal de pacientes
 clientes/          cliente SOAP independiente (zeep)
 pruebas/           scripts de las pruebas en la nube y sus resultados
-docs/              informe, fases, bitácora y capturas
+docs/              informe, fases, bitácora, flujos y capturas
 ```
 
 ## Cómo ejecutarlo
 
 1. **Bases de datos:**
-   - Azure SQL: ejecutar `database/azure-sql/01`–`04`, `06` y `07`, por ejemplo con `database/ejecutar_azure_sql.py`;
-   - Supabase: los tres scripts de `database/supabase/`;
+   - Azure SQL: ejecutar `database/azure-sql/01`–`04` y `06`–`09`, por ejemplo con `database/ejecutar_azure_sql.py`;
+   - Supabase: los cinco scripts de `database/supabase/` (`01`–`05`);
    - MongoDB: `mongosh … database/mongodb/init_mongo.js` y `guias_clinicas.js`.
 2. **Credenciales:** llenar `secretos/credenciales.env`, que no está en el repositorio, y generar los `.env` de cada VM con `python infra/generar_env.py`. Las plantillas están en los `*.env.example`.
 3. **En cada VM:**

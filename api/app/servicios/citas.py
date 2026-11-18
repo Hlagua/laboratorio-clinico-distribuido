@@ -1,5 +1,5 @@
 """Servicio de citas: franjas disponibles, reservas, cancelaciones y agenda."""
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from flask import Blueprint, g, jsonify, request
 
@@ -11,13 +11,20 @@ from .notificaciones import encolar
 
 bp = Blueprint("citas", __name__, url_prefix="/api/citas")
 
-# La cita es el turno para la toma de muestras en el laboratorio. Se confirma
-# cuando se paga la solicitud de exámenes vinculada a ella (sp_confirmar_pago);
-# si no se paga en MINUTOS_PARA_PAGAR, el sincronizador la cancela y libera el cupo.
+# Hay dos tipos de cita:
+# - MUESTRA: turno para la toma de muestras en el laboratorio (franjas sin médico).
+# - CONSULTA: consulta con un médico (franjas de su agenda). Se cobra por Stripe
+#   como una solicitud CONSULTA de una línea ("Consulta médica").
+# Una cita se confirma cuando se paga su solicitud (sp_confirmar_pago). Si no se
+# paga, el sincronizador la cancela: a los MINUTOS_PARA_PAGAR si la reservó el
+# paciente, o HORAS_ANTES_CONTROL antes de la hora si la agendó el médico (control).
 MINUTOS_PARA_PAGAR = 30
+HORAS_ANTES_CONTROL = 2
 
 SQL_CITAS = """
-SELECT c.cita_id, c.estado, c.motivo, c.canal, c.created_at, f.franja_id, f.fecha, f.hora_inicio, f.hora_fin,
+SELECT c.cita_id, c.estado, c.motivo, c.canal, c.created_at, c.tipo, c.origen, c.medico_id,
+       CONCAT(pmc.nombres, ' ', pmc.apellidos) AS medico, mc.especialidad,
+       f.franja_id, f.fecha, f.hora_inicio, f.hora_fin,
        pa.paciente_id, CONCAT(p.nombres, ' ', p.apellidos) AS paciente, p.cedula,
        s.solicitud_id, s.codigo AS solicitud_codigo, s.estado AS solicitud_estado, s.total AS solicitud_total,
        (SELECT STRING_AGG(t.nombre, ', ') FROM {e}.solicitud_detalle sd
@@ -26,17 +33,30 @@ FROM {e}.cita c
 JOIN {e}.franja_horaria f ON f.franja_id = c.franja_id
 JOIN {e}.paciente pa ON pa.paciente_id = c.paciente_id
 JOIN {e}.persona p ON p.persona_id = pa.persona_id
+LEFT JOIN {e}.medico mc ON mc.medico_id = c.medico_id
+LEFT JOIN {e}.persona pmc ON pmc.persona_id = mc.persona_id
 LEFT JOIN (SELECT cita_id, MAX(solicitud_id) AS solicitud_id FROM {e}.solicitud_examen
            WHERE cita_id IS NOT NULL AND estado <> 'ANULADA' GROUP BY cita_id) sx ON sx.cita_id = c.cita_id
 LEFT JOIN {e}.solicitud_examen s ON s.solicitud_id = sx.solicitud_id
 """
 
 
+def _inicio_utc(c: dict) -> datetime:
+    """Hora de la cita en UTC (las franjas están en hora de Ecuador, UTC-5)."""
+    hora = c["hora_inicio"] if isinstance(c["hora_inicio"], time) else time.fromisoformat(str(c["hora_inicio"]))
+    fecha = c["fecha"] if isinstance(c["fecha"], date) else date.fromisoformat(str(c["fecha"]))
+    return datetime.combine(fecha, hora) + timedelta(hours=5)
+
+
 def _con_vencimiento(citas: list[dict]) -> list[dict]:
-    """Agrega 'vence_at' (UTC) a las citas pendientes de pago."""
+    """Agrega 'vence_at' (UTC): hasta cuándo se puede pagar una cita pendiente."""
     for c in citas:
-        c["vence_at"] = (c["created_at"] + timedelta(minutes=MINUTOS_PARA_PAGAR)
-                         if c["estado"] == "PENDIENTE_PAGO" and c.get("created_at") else None)
+        if c["estado"] != "PENDIENTE_PAGO" or not c.get("created_at"):
+            c["vence_at"] = None
+        elif c.get("origen") == "MEDICO":
+            c["vence_at"] = _inicio_utc(c) - timedelta(hours=HORAS_ANTES_CONTROL)
+        else:
+            c["vence_at"] = c["created_at"] + timedelta(minutes=MINUTOS_PARA_PAGAR)
     return citas
 
 
@@ -52,13 +72,34 @@ def _fecha_param(nombre: str, defecto: date) -> date:
 
 @bp.get("/franjas")
 def franjas():
-    """Público: franjas con cupo entre ?desde y ?desde + ?dias (máx. 31)."""
+    """Público: franjas con cupo entre ?desde y ?desde + ?dias (máx. 31).
+
+    Sin ?medico_id: turnos de toma de muestras del laboratorio. Con ?medico_id: su agenda de consultas.
+    """
     desde = _fecha_param("desde", date.today())
     dias = min(max(request.args.get("dias", 7, type=int), 1), 31)
+    medico_id = request.args.get("medico_id", type=int)
+    filtro, params = ("medico_id = ?", [medico_id]) if medico_id else ("medico_id IS NULL", [])
     filas = db.leer(
-        "SELECT franja_id, fecha, hora_inicio, hora_fin, capacidad, ocupados, capacidad - ocupados AS cupos_libres "
-        "FROM {e}.franja_horaria WHERE activa = ? AND ocupados < capacidad AND fecha BETWEEN ? AND ? "
-        "ORDER BY fecha, hora_inicio", True, desde, desde + timedelta(days=dias))
+        "SELECT franja_id, fecha, hora_inicio, hora_fin, capacidad, ocupados, capacidad - ocupados AS cupos_libres, medico_id "
+        f"FROM {{e}}.franja_horaria WHERE activa = ? AND ocupados < capacidad AND fecha BETWEEN ? AND ? AND {filtro} "
+        "ORDER BY fecha, hora_inicio", True, desde, desde + timedelta(days=dias), *params)
+    ahora = datetime.utcnow()
+    return jsonify([f for f in filas if _inicio_utc(f) > ahora])
+
+
+@bp.get("/medicos")
+def medicos():
+    """Público: médicos activos con su especialidad, el precio de la consulta y cuántos turnos libres tienen."""
+    precio = db.leer_uno("SELECT precio FROM {e}.tipo_examen WHERE codigo = ?", "CONS-MED")
+    filas = db.leer("""
+        SELECT m.medico_id, CONCAT(p.nombres, ' ', p.apellidos) AS nombre, m.especialidad,
+               (SELECT COUNT(*) FROM {e}.franja_horaria f WHERE f.medico_id = m.medico_id AND f.activa = ?
+                AND f.ocupados < f.capacidad AND f.fecha >= ?) AS turnos_libres
+        FROM {e}.medico m JOIN {e}.persona p ON p.persona_id = m.persona_id
+        WHERE m.activo = ? ORDER BY p.apellidos""", True, date.today(), True)
+    for f in filas:
+        f["precio_consulta"] = precio["precio"] if precio else None
     return jsonify(filas)
 
 
@@ -72,18 +113,82 @@ def reservar():
         proteccion = request.args.get("proteccion", "1") != "0"
         espera_ms = min(request.args.get("espera_ms", 0, type=int), 5000)
 
-    cita_id = db.ejecutar_sp(
-        "sp_reservar_cita", "cita_id", paciente_id=paciente_id, franja_id=entero(d, "franja_id"),
-        motivo=texto(d, "motivo", False, 300), canal="PORTAL", usuario_id=usuario_actual()["usuario_id"],
-        instancia_api=config.INSTANCIA, protegido=proteccion, espera_ms=espera_ms)
+    franja_id = entero(d, "franja_id")
+    tipo = (d.get("tipo") or "MUESTRA").upper()
+    if tipo not in ("MUESTRA", "CONSULTA"):
+        raise ApiError("'tipo' debe ser MUESTRA o CONSULTA.", 422, "TIPO_INVALIDO")
+    franja = db.leer_uno("SELECT medico_id FROM {e}.franja_horaria WHERE franja_id = ?", franja_id, contingencia=False)
+    if not franja:
+        raise no_encontrado("La franja")
+    if (tipo == "CONSULTA") != (franja["medico_id"] is not None):
+        raise ApiError("La franja elegida no corresponde a ese tipo de cita.", 422, "FRANJA_INVALIDA")
+
+    if tipo == "CONSULTA":
+        cita_id = db.ejecutar_sp(
+            "sp_reservar_consulta", "cita_id", paciente_id=paciente_id, franja_id=franja_id,
+            motivo=texto(d, "motivo", False, 300), origen="PACIENTE", usuario_id=usuario_actual()["usuario_id"],
+            instancia_api=config.INSTANCIA)
+    else:
+        cita_id = db.ejecutar_sp(
+            "sp_reservar_cita", "cita_id", paciente_id=paciente_id, franja_id=franja_id,
+            motivo=texto(d, "motivo", False, 300), canal="PORTAL", usuario_id=usuario_actual()["usuario_id"],
+            instancia_api=config.INSTANCIA, protegido=proteccion, espera_ms=espera_ms)
 
     cita = _con_vencimiento([db.leer_uno(SQL_CITAS + " WHERE c.cita_id = ?", cita_id)])[0]
-    encolar(usuario_actual()["persona_id"], "CITA_RESERVADA",
-            f"Cita reservada para el {cita['fecha']} a las {str(cita['hora_inicio'])[:5]}",
-            f"Su cita fue reservada para el {cita['fecha']} a las {str(cita['hora_inicio'])[:5]}. "
-            f"Para confirmarla, elija sus exámenes y páguelos en los próximos {MINUTOS_PARA_PAGAR} minutos "
-            "desde 'Mis citas' en el portal; si no, la cita se cancela y el cupo se libera.")
+    cuando = f"el {cita['fecha']} a las {str(cita['hora_inicio'])[:5]}"
+    if tipo == "CONSULTA":
+        encolar(usuario_actual()["persona_id"], "CITA_RESERVADA", f"Consulta reservada para {cuando}",
+                f"Su consulta con Dr(a). {cita['medico']} quedó reservada para {cuando}. Para confirmarla, pague la "
+                f"consulta ({cita['solicitud_codigo']}) en los próximos {MINUTOS_PARA_PAGAR} minutos desde 'Mis citas'; "
+                "si no, la cita se cancela y el turno se libera.")
+    else:
+        encolar(usuario_actual()["persona_id"], "CITA_RESERVADA", f"Cita reservada para {cuando}",
+                f"Su turno de toma de muestras fue reservado para {cuando}. Para confirmarlo, elija sus exámenes y "
+                f"páguelos en los próximos {MINUTOS_PARA_PAGAR} minutos desde 'Mis citas' en el portal; si no, "
+                "la cita se cancela y el cupo se libera.")
     return jsonify(cita), 201
+
+
+@bp.post("/control")
+@requiere("MEDICO")
+def agendar_control():
+    """El médico agenda la cita de control en su propia agenda. El paciente la paga hasta 2 h antes."""
+    d = cuerpo()
+    paciente_id = entero(d, "paciente_id")
+    cita_id = db.ejecutar_sp(
+        "sp_reservar_consulta", "cita_id", paciente_id=paciente_id, franja_id=entero(d, "franja_id"),
+        motivo=texto(d, "motivo", False, 300) or "Control", origen="MEDICO", medico_agenda=perfil("medico_id"),
+        usuario_id=usuario_actual()["usuario_id"], instancia_api=config.INSTANCIA)
+    cita = _con_vencimiento([db.leer_uno(SQL_CITAS + " WHERE c.cita_id = ?", cita_id)])[0]
+    persona = db.leer_uno("SELECT pa.persona_id FROM {e}.paciente pa WHERE pa.paciente_id = ?", paciente_id)
+    vence = (cita["vence_at"] - timedelta(hours=5)).strftime("%d/%m/%Y %H:%M")
+    encolar(persona["persona_id"], "CITA_RESERVADA",
+            f"Cita de control el {cita['fecha']} a las {str(cita['hora_inicio'])[:5]}",
+            f"Dr(a). {cita['medico']} le agendó una cita de control para el {cita['fecha']} a las "
+            f"{str(cita['hora_inicio'])[:5]}. Pague la consulta ({cita['solicitud_codigo']}) desde 'Mis citas' en el "
+            f"portal antes del {vence}; si no, la cita se cancela.")
+    return jsonify(cita), 201
+
+
+@bp.get("/<int:cita_id>")
+@requiere("MEDICO", "LABORATORISTA", "ADMIN")
+def ver_cita(cita_id: int):
+    cita = db.leer_uno(SQL_CITAS + " WHERE c.cita_id = ?", cita_id)
+    if not cita:
+        raise no_encontrado("La cita")
+    if rol_actual() == "MEDICO" and cita["medico_id"] != perfil("medico_id"):
+        raise prohibido("La cita no es de su agenda.")
+    return jsonify(_con_vencimiento([cita])[0])
+
+
+@bp.post("/<int:cita_id>/atender")
+@requiere("MEDICO", "LABORATORISTA", "ADMIN")
+def atender(cita_id: int):
+    """Marca la cita como ATENDIDA. La consulta solo la cierra su médico."""
+    db.ejecutar_sp("sp_atender_cita", cita_id=cita_id,
+                   medico_id=perfil("medico_id") if rol_actual() == "MEDICO" else None,
+                   usuario_id=usuario_actual()["usuario_id"])
+    return jsonify(_con_vencimiento([db.leer_uno(SQL_CITAS + " WHERE c.cita_id = ?", cita_id)])[0])
 
 
 @bp.get("/mias")
@@ -96,21 +201,36 @@ def mias():
 @bp.delete("/<int:cita_id>")
 @requiere("PACIENTE", "ADMIN")
 def cancelar(cita_id: int):
-    cita = db.leer_uno("SELECT paciente_id FROM {e}.cita WHERE cita_id = ?", cita_id, contingencia=False)
+    cita = db.leer_uno("SELECT paciente_id, estado FROM {e}.cita WHERE cita_id = ?", cita_id, contingencia=False)
     if not cita:
         raise no_encontrado("La cita")
     if rol_actual() == "PACIENTE" and cita["paciente_id"] != perfil("paciente_id"):
         raise prohibido("Solo puede cancelar sus propias citas.")
+    # Una cita pagada no la cancela el paciente: quedaría el cobro sin turno. Lo resuelve el laboratorio
+    # (reprograma o el administrador cancela y reembolsa).
+    if rol_actual() == "PACIENTE" and cita["estado"] == "CONFIRMADA":
+        raise ApiError("Esta cita ya está pagada. Comuníquese con el laboratorio para reprogramarla o solicitar el "
+                       "reembolso.", 409, "CITA_PAGADA")
     db.ejecutar_sp("sp_cancelar_cita", cita_id=cita_id, usuario_id=usuario_actual()["usuario_id"])
     return jsonify(mensaje="Cita cancelada.", cita_id=cita_id)
 
 
 @bp.get("/agenda")
-@requiere("LABORATORISTA", "ADMIN")
+@requiere("LABORATORISTA", "MEDICO", "ADMIN")
 def agenda():
-    """Turnos de toma de muestras del día (no son consultas médicas)."""
+    """Citas del día. Laboratorio: tomas de muestras. Médico: sus consultas. Administrador: todo (?tipo=)."""
     dia = _fecha_param("fecha", date.today())
-    return jsonify(db.leer(SQL_CITAS + " WHERE f.fecha = ? AND c.estado <> 'CANCELADA' ORDER BY f.hora_inicio, c.cita_id", dia))
+    condiciones, params = ["f.fecha = ?", "c.estado <> 'CANCELADA'"], [dia]
+    if rol_actual() == "MEDICO":
+        condiciones.append("c.medico_id = ?")
+        params.append(perfil("medico_id"))
+    elif rol_actual() == "LABORATORISTA":
+        condiciones.append("c.tipo = 'MUESTRA'")
+    elif request.args.get("tipo") in ("MUESTRA", "CONSULTA"):
+        condiciones.append("c.tipo = ?")
+        params.append(request.args["tipo"])
+    return jsonify(_con_vencimiento(db.leer(SQL_CITAS + " WHERE " + " AND ".join(condiciones)
+                                            + " ORDER BY f.hora_inicio, c.cita_id", *params)))
 
 
 @bp.post("/franjas")
@@ -126,17 +246,19 @@ def crear_franjas():
     if hasta < desde or (hasta - desde).days > 62:
         raise ApiError("El rango debe ser válido y de máximo 62 días.", 422, "RANGO_INVALIDO")
     intervalo = entero(d, "intervalo_minutos", False) or 30
-    capacidad = entero(d, "capacidad", False) or 3
+    medico_id = entero(d, "medico_id", False)          # None = turnos del laboratorio
+    capacidad = entero(d, "capacidad", False) or (1 if medico_id else 3)
     creadas = db.ejecutar("""
         ;WITH d10 AS (SELECT i FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) v(i)),
          n AS (SELECT a.i + b.i * 10 + c.i * 100 AS i FROM d10 a CROSS JOIN d10 b CROSS JOIN d10 c),
          dias AS (SELECT DATEADD(DAY, i, CAST(? AS DATE)) AS fecha FROM n WHERE i <= DATEDIFF(DAY, ?, ?)),
          horas AS (SELECT DATEADD(MINUTE, i * ?, CAST(? AS TIME(0))) AS hora FROM n
                    WHERE (i + 1) * ? <= DATEDIFF(MINUTE, CAST(? AS TIME(0)), CAST(? AS TIME(0))))
-        INSERT INTO dbo.franja_horaria (fecha, hora_inicio, hora_fin, capacidad)
-        SELECT d.fecha, h.hora, DATEADD(MINUTE, ?, h.hora), ?
+        INSERT INTO dbo.franja_horaria (fecha, hora_inicio, hora_fin, capacidad, medico_id)
+        SELECT d.fecha, h.hora, DATEADD(MINUTE, ?, h.hora), ?, ?
         FROM dias d CROSS JOIN horas h
         WHERE DATEDIFF(DAY, '19000101', d.fecha) % 7 <> 6
-          AND NOT EXISTS (SELECT 1 FROM dbo.franja_horaria f WHERE f.fecha = d.fecha AND f.hora_inicio = h.hora)
-    """, desde, desde, hasta, intervalo, h_ini, intervalo, h_ini, h_fin, intervalo, capacidad)
+          AND NOT EXISTS (SELECT 1 FROM dbo.franja_horaria f WHERE f.fecha = d.fecha AND f.hora_inicio = h.hora
+                          AND (f.medico_id = ? OR (f.medico_id IS NULL AND ? IS NULL)))
+    """, desde, desde, hasta, intervalo, h_ini, intervalo, h_ini, h_fin, intervalo, capacidad, medico_id, medico_id, medico_id)
     return jsonify(franjas_creadas=creadas), 201

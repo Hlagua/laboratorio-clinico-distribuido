@@ -8,7 +8,7 @@ from ..paginacion import donde, listar, rango_fechas
 from ..errores import ApiError
 from ..pdf import pdf_ingresos
 from ..seguridad import ROLES, hash_password, requiere, usuario_actual, validar_password
-from ..validacion import cedula, cuerpo, fecha, texto
+from ..validacion import cedula, cuerpo, fecha, nombre, telefono, texto
 
 bp = Blueprint("usuarios", __name__, url_prefix="/api")
 
@@ -52,9 +52,9 @@ def crear_usuario():
     validar_password(password)
     usuario_id = db.ejecutar_sp(
         "sp_crear_usuario", "usuario_id", cedula=cedula(texto(d, "cedula", maximo=10)),
-        nombres=texto(d, "nombres", maximo=100), apellidos=texto(d, "apellidos", maximo=100),
+        nombres=nombre(d, "nombres"), apellidos=nombre(d, "apellidos"),
         fecha_nacimiento=fecha(d, "fecha_nacimiento"), sexo=texto(d, "sexo", maximo=1).upper(),
-        telefono=texto(d, "telefono", False, 20), email=texto(d, "email", maximo=150).lower(),
+        telefono=telefono(d), email=texto(d, "email", maximo=150).lower(),
         password_hash=hash_password(password), rol_codigo=rol,
         registro_profesional=texto(d, "registro_profesional", False, 30),
         especialidad_o_area=texto(d, "especialidad_o_area", False, 100), admin_id=usuario_actual()["usuario_id"])
@@ -94,7 +94,7 @@ def activar_usuario(usuario_id: int):
 @requiere("LABORATORISTA", "MEDICO", "ADMIN")
 def buscar_pacientes():
     """Búsqueda por cédula exacta o por parte del apellido (?q=)."""
-    sql = ("SELECT pa.paciente_id, p.cedula, p.nombres, p.apellidos, p.fecha_nacimiento, p.sexo, p.telefono, p.email, "
+    sql = ("SELECT pa.paciente_id, p.cedula, p.nombres, p.apellidos, p.fecha_nacimiento, p.sexo, p.telefono, p.email, p.direccion, "
            "pa.tipo_sangre, pa.alergias FROM {e}.paciente pa JOIN {e}.persona p ON p.persona_id = pa.persona_id")
     if request.args.get("cedula"):
         return jsonify(db.leer(sql + " WHERE p.cedula = ?", request.args["cedula"]))
@@ -103,6 +103,42 @@ def buscar_pacientes():
         return listar(sql + " WHERE UPPER(p.apellidos) LIKE ? OR UPPER(p.nombres) LIKE ?", [patron, patron],
                       "ORDER BY p.apellidos, p.nombres", maximo=50)
     return listar(sql, [], "ORDER BY p.apellidos, p.nombres", maximo=100)
+
+
+@bp.post("/pacientes")
+@requiere("LABORATORISTA", "MEDICO", "ADMIN")
+def registrar_paciente_ventanilla():
+    """Paciente atendido en ventanilla: queda registrado sin cuenta (puede crearla después en el portal)."""
+    d = cuerpo()
+    email = texto(d, "email", False, 150)
+    if email and "@" not in email:
+        raise ApiError("El correo no es válido.", 422, "EMAIL_INVALIDO")
+    sexo = texto(d, "sexo", maximo=1).upper()
+    if sexo not in ("M", "F", "O"):
+        raise ApiError("Sexo: M, F u O.", 422, "TIPO_INVALIDO")
+    paciente_id = db.ejecutar_sp(
+        "sp_registrar_paciente", "paciente_id", cedula=cedula(texto(d, "cedula", maximo=10)),
+        nombres=nombre(d, "nombres"), apellidos=nombre(d, "apellidos"),
+        fecha_nacimiento=fecha(d, "fecha_nacimiento"), sexo=sexo, telefono=telefono(d),
+        email=email.lower() if email else None, direccion=texto(d, "direccion", False, 250), password_hash=None)
+    return jsonify(db.leer_uno(
+        "SELECT pa.paciente_id, p.cedula, p.nombres, p.apellidos, p.fecha_nacimiento, p.sexo, p.telefono, p.email, "
+        "p.direccion, pa.tipo_sangre, pa.alergias FROM {e}.paciente pa JOIN {e}.persona p ON p.persona_id = pa.persona_id "
+        "WHERE pa.paciente_id = ?", paciente_id)), 201
+
+
+@bp.post("/usuarios/<int:usuario_id>/clave")
+@requiere("ADMIN")
+def restablecer_clave(usuario_id: int):
+    """El administrador asigna una clave temporal (el usuario la cambia después) y desbloquea la cuenta."""
+    password = texto(cuerpo(), "password", maximo=72)
+    validar_password(password)
+    if not db.ejecutar("UPDATE dbo.usuario SET password_hash = ?, intentos_fallidos = 0, bloqueado_hasta = NULL, "
+                       "updated_at = SYSUTCDATETIME() WHERE usuario_id = ?", hash_password(password), usuario_id):
+        raise ApiError("El usuario no existe.", 404, "NO_ENCONTRADO")
+    db.ejecutar_sp("sp_auditar", usuario_id=usuario_actual()["usuario_id"], rol_actuante="ADMIN",
+                   accion="RESTABLECER_CLAVE", entidad="usuario", entidad_id=str(usuario_id))
+    return jsonify(usuario_id=usuario_id, mensaje="Clave restablecida.")
 
 
 # ------------------------------ reportes ------------------------------

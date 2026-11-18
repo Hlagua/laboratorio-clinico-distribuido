@@ -2,7 +2,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, mensajeError } from '../core/api';
 import { dinero, hoyIso, rango } from '../core/formato';
-import { TipoExamen } from '../core/modelos';
+import { MedicoAgenda, TipoExamen } from '../core/modelos';
 import { paginarLocal, Paginador } from '../core/paginador';
 
 interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | null; valor_ref_max: number | null; valor_ref_texto: string }
@@ -69,6 +69,11 @@ interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | n
       <form class="card" (ngSubmit)="generarFranjas()">
         <h2>Generar franjas de atención</h2>
         <p class="muted">Lunes a sábado. Las franjas que ya existen no se duplican.</p>
+        <div class="campo"><label for="fm">Agenda de</label>
+          <select id="fm" name="fm" [(ngModel)]="fr.medico_id" (ngModelChange)="fr.capacidad = $event ? 1 : 3">
+            <option [ngValue]="null">Laboratorio (toma de muestras)</option>
+            @for (m of medicos(); track m.medico_id) { <option [ngValue]="m.medico_id">Dr(a). {{ m.nombre }} · {{ m.especialidad }}</option> }
+          </select></div>
         <div class="fila">
           <div class="campo"><label>Desde</label><input type="date" name="d" [(ngModel)]="fr.desde" required /></div>
           <div class="campo"><label>Hasta</label><input type="date" name="h" [(ngModel)]="fr.hasta" required /></div>
@@ -100,7 +105,9 @@ export class Catalogo implements OnInit {
   protected readonly error = signal('');
   protected readonly aviso = signal('');
   protected ex = this.examenVacio();
-  protected fr = { desde: hoyIso(), hasta: hoyIso(), hora_inicio: '07:00', hora_fin: '11:00', intervalo_minutos: 30, capacidad: 3 };
+  protected fr = { desde: hoyIso(), hasta: hoyIso(), hora_inicio: '07:00', hora_fin: '11:00', intervalo_minutos: 30, capacidad: 3,
+    medico_id: null as number | null };
+  protected readonly medicos = signal<MedicoAgenda[]>([]);
 
   ngOnInit() {
     this.cargar();
@@ -117,6 +124,7 @@ export class Catalogo implements OnInit {
 
   async cargar() {
     try {
+      this.medicos.set(await this.api.get<MedicoAgenda[]>('/api/citas/medicos'));
       const c = await this.api.get<TipoExamen[]>('/api/examenes/catalogo');
       this.catalogo.set(c);
       this.categorias.set([...new Set(c.map((t) => t.categoria))]);

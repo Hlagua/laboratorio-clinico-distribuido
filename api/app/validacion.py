@@ -1,4 +1,5 @@
 """Validación sencilla del cuerpo JSON de las peticiones."""
+import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -77,4 +78,23 @@ def lista_enteros(datos: dict, campo: str) -> list[int]:
     valor = datos.get(campo)
     if not isinstance(valor, list) or not valor or not all(isinstance(x, int) and not isinstance(x, bool) and x > 0 for x in valor):
         raise ApiError(f"El campo '{campo}' debe ser una lista de enteros positivos.", 422, "TIPO_INVALIDO")
+    return valor
+
+
+_LETRAS = re.compile(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' ]+$")
+
+
+def nombre(datos: dict, campo: str) -> str:
+    """Nombres y apellidos: solo letras (con tildes), espacios y apóstrofo; hasta 50 caracteres."""
+    valor = " ".join(texto(datos, campo, maximo=50).split())
+    if not _LETRAS.match(valor):
+        raise ApiError(f"'{campo}' solo puede tener letras.", 422, "TIPO_INVALIDO")
+    return valor
+
+
+def telefono(datos: dict, campo: str = "telefono") -> str | None:
+    """Teléfono opcional: 9 o 10 dígitos, empieza con 0 (fijo o celular de Ecuador)."""
+    valor = texto(datos, campo, False, 10)
+    if valor and not re.fullmatch(r"0\d{8,9}", valor):
+        raise ApiError("El teléfono debe tener 9 o 10 dígitos y empezar con 0.", 422, "TELEFONO_INVALIDO")
     return valor

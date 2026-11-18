@@ -54,9 +54,30 @@ def _solicitud_a_pagar(solicitud_id: int) -> dict:
         raise no_encontrado("La solicitud")
     if rol_actual() == "PACIENTE" and s["paciente_id"] != perfil("paciente_id"):
         raise prohibido("Solo puede pagar sus propias solicitudes.")
+    if s["estado"] == "ANULADA":
+        raise ApiError("La solicitud está anulada (la cita se canceló).", 409, "ESTADO_INVALIDO")
     if s["estado"] != "REGISTRADA":
         raise ApiError("La solicitud ya fue pagada o está anulada.", 409, "ESTADO_INVALIDO")
     return s
+
+
+def _sesion_stripe(s: dict, exito: str, cancelado: str, email: str | None):
+    """Sesión de Stripe Checkout con una línea por examen (o por la consulta)."""
+    examenes = db.leer("SELECT t.nombre, d.precio_unitario FROM {e}.solicitud_detalle d "
+                       "JOIN {e}.tipo_examen t ON t.tipo_examen_id = d.tipo_examen_id "
+                       "WHERE d.solicitud_id = ? AND d.estado <> 'ANULADO'", s["solicitud_id"])
+    return _stripe().checkout.Session.create(
+        mode="payment",
+        line_items=[{"quantity": 1, "price_data": {
+            "currency": "usd", "unit_amount": int(Decimal(e["precio_unitario"]) * 100),
+            "product_data": {"name": e["nombre"]}}} for e in examenes],
+        **({"customer_email": email} if email else {}),
+        client_reference_id=s["codigo"],
+        metadata={"solicitud_id": s["solicitud_id"], "codigo": s["codigo"]},
+        payment_intent_data={"metadata": {"solicitud_id": s["solicitud_id"], "codigo": s["codigo"]}},
+        expires_at=int(time.time()) + 31 * 60,     # mínimo permitido por Stripe: 30 min
+        success_url=exito, cancel_url=cancelado,
+    )
 
 
 @bp.post("/checkout")
@@ -64,29 +85,53 @@ def _solicitud_a_pagar(solicitud_id: int) -> dict:
 def checkout():
     """Registra la solicitud de pago y devuelve la URL de Stripe Checkout."""
     s = _solicitud_a_pagar(entero(cuerpo(), "solicitud_id"))
-    examenes = db.leer("SELECT t.nombre, d.precio_unitario FROM {e}.solicitud_detalle d "
-                       "JOIN {e}.tipo_examen t ON t.tipo_examen_id = d.tipo_examen_id "
-                       "WHERE d.solicitud_id = ? AND d.estado <> 'ANULADO'", s["solicitud_id"])
-    sesion = _stripe().checkout.Session.create(
-        mode="payment",
-        line_items=[{"quantity": 1, "price_data": {
-            "currency": "usd", "unit_amount": int(Decimal(e["precio_unitario"]) * 100),
-            "product_data": {"name": e["nombre"]}}} for e in examenes],
-        customer_email=s["email"],
-        client_reference_id=s["codigo"],
-        metadata={"solicitud_id": s["solicitud_id"], "codigo": s["codigo"]},
-        payment_intent_data={"metadata": {"solicitud_id": s["solicitud_id"], "codigo": s["codigo"]}},
-        expires_at=int(time.time()) + 31 * 60,     # mínimo permitido por Stripe: 30 min
-        success_url=f"{config.URL_PORTAL}/pagos/resultado?estado=exito&session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{config.URL_PORTAL}/pagos/resultado?estado=cancelado&solicitud={s['solicitud_id']}",
-    )
+    sesion = _sesion_stripe(
+        s, f"{config.URL_PORTAL}/pagos/resultado?estado=exito&session_id={{CHECKOUT_SESSION_ID}}",
+        f"{config.URL_PORTAL}/pagos/resultado?estado=cancelado&solicitud={s['solicitud_id']}", s["email"])
     pago_id = db.ejecutar_sp("sp_crear_pago", "pago_id", solicitud_id=s["solicitud_id"], metodo="STRIPE",
                              stripe_checkout_session_id=sesion.id, usuario_id=usuario_actual()["usuario_id"])
     return jsonify(pago_id=pago_id, checkout_url=sesion.url, session_id=sesion.id, monto=s["total"]), 201
 
 
+def _datos_factura(d: dict) -> dict:
+    """Datos de facturación que toma el laboratorista. Sin identificación: consumidor final."""
+    f = d.get("factura") or {}
+    if not isinstance(f, dict):
+        raise ApiError("'factura' debe ser un objeto.", 422, "TIPO_INVALIDO")
+    ident = str(f.get("identificacion") or "").strip()
+    if not ident:
+        return {"factura_identificacion": "9999999999999", "factura_nombre": "CONSUMIDOR FINAL",
+                "factura_direccion": None, "factura_email": texto(f, "email", False, 150)}
+    if not ident.isdigit() or len(ident) not in (10, 13):
+        raise ApiError("La identificación debe ser una cédula (10 dígitos) o un RUC (13).", 422, "IDENTIFICACION_INVALIDA")
+    email = texto(f, "email", False, 150)
+    if email and "@" not in email:
+        raise ApiError("El correo de facturación no es válido.", 422, "EMAIL_INVALIDO")
+    return {"factura_identificacion": ident, "factura_nombre": texto(f, "nombre", maximo=200),
+            "factura_direccion": texto(f, "direccion", False, 250), "factura_email": email}
+
+
+@bp.post("/ventanilla")
+@requiere("LABORATORISTA", "ADMIN")
+def ventanilla():
+    """Cobro en ventanilla, siempre por la pasarela: devuelve la URL de Stripe Checkout y su QR.
+
+    El paciente paga escaneando el QR en su celular o en la pantalla de ventanilla. Al confirmarlo
+    Stripe (webhook), la solicitud queda pagada y la factura sale con los datos tomados aquí.
+    """
+    d = cuerpo()
+    s = _solicitud_a_pagar(entero(d, "solicitud_id"))
+    factura = _datos_factura(d)
+    volver = f"{config.URL_PORTAL}/admin/solicitudes/{s['solicitud_id']}"
+    sesion = _sesion_stripe(s, f"{volver}?pago=exito", f"{volver}?pago=cancelado", factura["factura_email"])
+    pago_id = db.ejecutar_sp("sp_crear_pago", "pago_id", solicitud_id=s["solicitud_id"], metodo="STRIPE",
+                             stripe_checkout_session_id=sesion.id, usuario_id=usuario_actual()["usuario_id"], **factura)
+    return jsonify(pago_id=pago_id, checkout_url=sesion.url, monto=s["total"],
+                   qr=segno.make(sesion.url, error="m").png_data_uri(scale=6)), 201
+
+
 @bp.get("/factura/<int:solicitud_id>")
-@requiere("PACIENTE", "ADMIN")
+@requiere("PACIENTE", "LABORATORISTA", "ADMIN")
 def descargar_factura(solicitud_id: int):
     """Factura de una solicitud pagada: ?formato=pdf (por defecto) o ?formato=xml."""
     f = factura.datos(solicitud_id)
@@ -163,6 +208,7 @@ def webhook():
             if objeto.get("payment_status") == "paid":
                 db.ejecutar_sp("sp_confirmar_pago", pago_id=pago["pago_id"], aprobado=True,
                                stripe_payment_intent_id=objeto.get("payment_intent"))
+                _factura_a_otro_correo(pago["pago_id"])
         elif tipo == "checkout.session.async_payment_failed":
             db.ejecutar_sp("sp_confirmar_pago", pago_id=pago["pago_id"], aprobado=False,
                            stripe_payment_intent_id=objeto.get("payment_intent"), motivo_rechazo="Pago asíncrono fallido")
@@ -179,6 +225,22 @@ def webhook():
     log.info('{"evento":"stripe_webhook","tipo":"%s","pago_id":%s,"instancia":"%s"}',
              tipo, pago["pago_id"] if pago else "null", config.INSTANCIA)
     return jsonify(recibido=True, tipo=tipo, pago_id=pago["pago_id"] if pago else None)
+
+
+def _factura_a_otro_correo(pago_id: int):
+    """En ventanilla la factura puede ir a otro correo que el del paciente (o el paciente no tiene correo)."""
+    try:
+        f = db.leer_uno("""
+            SELECT pg.factura_email, s.codigo, pa.persona_id, pe.email
+            FROM {e}.pago pg JOIN {e}.solicitud_examen s ON s.solicitud_id = pg.solicitud_id
+            JOIN {e}.paciente pa ON pa.paciente_id = s.paciente_id JOIN {e}.persona pe ON pe.persona_id = pa.persona_id
+            WHERE pg.pago_id = ? AND pg.estado = 'APROBADO'""", pago_id, contingencia=False)
+        if f and f["factura_email"] and f["factura_email"].lower() != (f["email"] or "").lower():
+            db.ejecutar("INSERT INTO dbo.notificacion (persona_id, tipo, destinatario, asunto, cuerpo) VALUES (?, ?, ?, ?, ?)",
+                        f["persona_id"], "PAGO_APROBADO", f["factura_email"], f"Pago confirmado - {f['codigo']}",
+                        f"El pago de la solicitud {f['codigo']} fue aprobado.")
+    except ApiError as e:
+        log.warning('{"evento":"factura_correo_no_encolada","pago_id":%s,"error":"%s"}', pago_id, e.mensaje)
 
 
 def _pago_por_sesion(session_id: str) -> dict | None:
