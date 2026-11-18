@@ -45,7 +45,7 @@ export class Inicio implements OnInit {
         this.api.get<Cita[]>('/api/citas/agenda', { fecha: hoyIso() }),
         medico ? this.api.get<SolicitudResumen[]>('/api/solicitudes', { estado: 'COMPLETADA', propias: 1, tipo: 'EXAMENES' })
           : Promise.resolve([]),
-        this.auth.tiene('MEDICO', 'ADMIN') ? this.api.get<Tratamiento[]>('/api/tratamientos') : Promise.resolve([]),
+        medico ? this.api.get<Tratamiento[]>('/api/tratamientos') : Promise.resolve([]),
         this.auth.tiene('ADMIN') ? this.api.get<unknown[]>('/api/pagos', { estado: 'PENDIENTE' }) : Promise.resolve([]),
       ]);
       const lista: Indicador[] = [{
@@ -59,8 +59,8 @@ export class Inicio implements OnInit {
       }
       lista.push({ titulo: 'Solicitudes por procesar', valor: pagadas.length + enProceso.length,
         detalle: `${pagadas.length} pagadas · ${enProceso.length} en proceso`, ruta: '/solicitudes' });
-      if (this.auth.tiene('MEDICO', 'ADMIN')) {
-        lista.push({ titulo: medico ? 'Mis tratamientos activos' : 'Tratamientos activos',
+      if (medico) {
+        lista.push({ titulo: 'Mis tratamientos activos',
           valor: trat.filter((t) => t.estado === 'ACTIVO').length, detalle: 'Seguimiento médico', ruta: '/pacientes' });
       }
       if (this.auth.tiene('ADMIN')) {

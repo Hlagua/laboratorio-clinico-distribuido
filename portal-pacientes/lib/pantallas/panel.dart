@@ -111,6 +111,7 @@ class _PanelState extends State<Panel> {
       if (solicitudId != null && !consulta)
         'Exámenes ${c['solicitud_codigo']}: ${c['examenes_resumen'] ?? ''} · ${dinero(c['solicitud_total'])}',
       if (solicitudId != null && consulta) 'Consulta ${c['solicitud_codigo']} · ${dinero(c['solicitud_total'])}',
+      if (control) 'Control incluido en su consulta · sin costo',
     ];
     return Card(
       child: Padding(
@@ -125,7 +126,7 @@ class _PanelState extends State<Panel> {
             trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
               Etiqueta(estado),
               // Una cita pagada no se cancela desde aquí: la reprograma o reembolsa el laboratorio.
-              if (pendiente)
+              if (pendiente || (control && estado == 'CONFIRMADA'))
                 IconButton(tooltip: 'Cancelar cita', icon: const Icon(Icons.close), onPressed: () => _cancelar(c)),
             ]),
           ),
@@ -158,7 +159,7 @@ class _PanelState extends State<Panel> {
                 ),
               ]),
             )
-          else if (estado == 'CONFIRMADA')
+          else if (estado == 'CONFIRMADA' && !control)
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
               child: Text('Cita pagada. Para reprogramarla o cancelarla, comuníquese con el laboratorio.',

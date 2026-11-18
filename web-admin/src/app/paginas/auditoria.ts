@@ -33,7 +33,7 @@ function haceDias(dias: number): string {
           <select id="ea" name="ea" [(ngModel)]="f.accion"><option value="">Todas</option>
             @for (a of acciones(); track a) { <option [value]="a">{{ a }}</option> }</select></div>
         <div class="campo"><label for="eu">Usuario</label>
-          <input id="eu" name="eu" [(ngModel)]="f.usuario" placeholder="parte del correo o «sistema»" /></div>
+          <input id="eu" name="eu" maxlength="100" [(ngModel)]="f.usuario" placeholder="parte del correo o «sistema»" /></div>
         <div class="campo botones">
           <button type="submit">Filtrar</button>
           <button type="button" class="secundario" (click)="limpiar()">Limpiar</button>
@@ -55,7 +55,7 @@ function haceDias(dias: number): string {
       <div class="entre">
         <h2>Correos (Mailjet)</h2>
         <form class="fila" (ngSubmit)="prueba()">
-          <input type="email" name="c" [(ngModel)]="correoPrueba" placeholder="correo para prueba" />
+          <input type="email" name="c" maxlength="150" [(ngModel)]="correoPrueba" placeholder="correo para prueba" />
           <button type="submit" class="secundario chico" [disabled]="!correoPrueba">Enviar prueba</button>
           <button type="button" class="chico" (click)="procesar()">Enviar pendientes</button>
         </form>
@@ -64,7 +64,7 @@ function haceDias(dias: number): string {
         <div class="campo"><label for="ce">Estado</label>
           <select id="ce" name="ce" [(ngModel)]="fc.estado"><option value="">Todos</option>
             @for (e of estadosCorreo; track e) { <option [value]="e">{{ textoEstado(e) }}</option> }</select></div>
-        <div class="campo"><label for="cq">Destinatario o asunto</label><input id="cq" name="cq" [(ngModel)]="fc.q" /></div>
+        <div class="campo"><label for="cq">Destinatario o asunto</label><input id="cq" name="cq" maxlength="100" [(ngModel)]="fc.q" /></div>
         <div class="campo botones"><button type="submit">Filtrar</button></div>
       </form>
       <table>

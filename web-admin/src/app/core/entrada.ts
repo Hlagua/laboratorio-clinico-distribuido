@@ -1,8 +1,11 @@
 import { Directive, ElementRef, HostListener, inject } from '@angular/core';
 
 /** Quita lo que no cumple el patrón mientras se escribe y avisa a ngModel con un nuevo evento input. */
-function filtrar(el: HTMLInputElement, permitido: RegExp, maximo: number) {
-  const limpio = [...el.value].filter((c) => permitido.test(c)).join('').slice(0, maximo);
+function filtrar(el: HTMLInputElement, permitido: RegExp, maximo: number, unEspacio = false) {
+  let limpio = [...el.value].filter((c) => permitido.test(c)).join('');
+  // Nombres: sin espacio al inicio ni dos espacios seguidos.
+  if (unEspacio) limpio = limpio.replace(/^\s+/, '').replace(/\s{2,}/g, ' ');
+  limpio = limpio.slice(0, maximo);
   if (limpio !== el.value) {
     el.value = limpio;
     el.dispatchEvent(new Event('input'));
@@ -20,6 +23,17 @@ export class SoloNumeros {
   }
 }
 
+/** Fecha de nacimiento: entre 1900 y hoy (el calendario no deja elegir fuera de ese rango). */
+@Directive({ selector: 'input[type=date][nacimiento]', host: { min: '1900-01-01', '[max]': 'hoy' } })
+export class Nacimiento {
+  protected readonly hoy = new Date().toISOString().slice(0, 10);
+}
+
+/** ¿La fecha (AAAA-MM-DD) es un nacimiento posible? */
+export function nacimientoValido(f: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(f) && f >= '1900-01-01' && f <= new Date().toISOString().slice(0, 10);
+}
+
 /** Solo letras (con tildes), espacios y apóstrofo; hasta 50 caracteres (nombres y apellidos). */
 @Directive({ selector: 'input[soloLetras]', host: { maxlength: '50' } })
 export class SoloLetras {
@@ -27,6 +41,6 @@ export class SoloLetras {
 
   @HostListener('input')
   alEscribir() {
-    filtrar(this.el.nativeElement, /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' ]/, 50);
+    filtrar(this.el.nativeElement, /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' ]/, 50, true);
   }
 }

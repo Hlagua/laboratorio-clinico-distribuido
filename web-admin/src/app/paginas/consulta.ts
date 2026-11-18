@@ -77,7 +77,7 @@ import { Cita, Franja, Paciente, SolicitudResumen, TipoExamen, Tratamiento } fro
 
       <div class="card">
         <h2>Agendar la cita de control</h2>
-        <p class="muted">En su agenda. El paciente la paga por el portal hasta 2 horas antes; si no, se libera.</p>
+        <p class="muted">En su agenda. Está incluida en la consulta: queda confirmada y sin costo para el paciente.</p>
         @if (diasControl().length) {
           <div class="chips">
             @for (d of diasControl(); track d) {
@@ -90,7 +90,8 @@ import { Cita, Franja, Paciente, SolicitudResumen, TipoExamen, Tratamiento } fro
             }
           </div>
           <div class="fila">
-            <div class="campo"><label for="mc">Motivo del control</label><input id="mc" [(ngModel)]="motivoControl" /></div>
+            <div class="campo"><label for="mc">Motivo del control</label><input id="mc" maxlength="200" [(ngModel)]="motivoControl" />
+              <small class="muted">{{ motivoControl.length }}/200</small></div>
             <div class="campo"><button (click)="agendar()" [disabled]="!franja() || ocupado()">
               Agendar control {{ franja() ? 'el ' + dia() + ' a las ' + hora(franja()!.hora_inicio) : '' }}</button></div>
           </div>
@@ -98,7 +99,7 @@ import { Cita, Franja, Paciente, SolicitudResumen, TipoExamen, Tratamiento } fro
           <p class="muted">No tiene turnos libres en los próximos 31 días. El administrador los genera en "Catálogo y franjas".</p>
         }
         @if (control(); as k) {
-          <p class="ok-texto">Control agendado para el {{ k.fecha }} a las {{ hora(k.hora_inicio) }} ({{ k.solicitud_codigo }}).</p>
+          <p class="ok-texto">Control agendado y confirmado para el {{ k.fecha }} a las {{ hora(k.hora_inicio) }}. El paciente recibió un correo.</p>
         }
       </div>
     } @else if (!error()) {

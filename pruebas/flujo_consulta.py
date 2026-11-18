@@ -94,8 +94,9 @@ posteriores = [f for f in requests.get(D + "/api/citas/franjas", params={"medico
 r = pedir("POST", "/api/citas/control", med, "MEDICO", json={"paciente_id": cons["paciente_id"],
                                                               "franja_id": posteriores[0]["franja_id"], "motivo": "Control con glucosa"})
 control = r.json()
-ok(r.status_code == 201 and control["origen"] == "MEDICO" and control["estado"] == "PENDIENTE_PAGO" and control["vence_at"],
-   "13. el médico agenda la cita de control (se paga hasta 2 h antes)", f"{control['fecha']} {control['hora_inicio']} · vence {control['vence_at']}")
+ok(r.status_code == 201 and control["origen"] == "MEDICO" and control["estado"] == "CONFIRMADA" and control["solicitud_id"] is None,
+   "13. el médico agenda la cita de control: confirmada y sin cobro (incluida en la consulta)",
+   f"{control['fecha']} {control['hora_inicio']}")
 otro = next((f for f in requests.get(D + "/api/citas/franjas", params={"dias": 14}, timeout=60).json()), None)
 r = pedir("POST", "/api/citas/control", med, "MEDICO", json={"paciente_id": cons["paciente_id"], "franja_id": otro["franja_id"]})
 ok(r.status_code in (403, 422), "14. el médico no puede agendar fuera de su agenda", str(r.status_code))
@@ -103,6 +104,9 @@ r = pedir("POST", f"/api/citas/{cons['cita_id']}/atender", med, "MEDICO")
 cs = pedir("GET", f"/api/solicitudes/{cons['solicitud_id']}", pac, "PACIENTE").json()
 ok(r.status_code == 200 and r.json()["estado"] == "ATENDIDA" and cs["estado"] == "COMPLETADA",
    "15. el médico finaliza la consulta: cita ATENDIDA y cobro COMPLETADO")
+
+r = pedir("DELETE", f"/api/citas/{control['cita_id']}", pac, "PACIENTE")
+ok(r.status_code == 200, "13b. el paciente sí puede cancelar el control (no tiene cobro)")
 
 # --- El paciente paga los exámenes; el laboratorio los procesa; el médico recibe los resultados ---
 ok(pedir("GET", "/api/solicitudes", lab, "LABORATORISTA", params={"codigo": cons["solicitud_codigo"]}).json() == [],
@@ -120,7 +124,10 @@ ok({"EXAMENES_ORDENADOS", "RESULTADO_LISTO", "RESULTADO_MEDICO"} <= tipos,
    "17. correos: exámenes ordenados al paciente y resultados al paciente y al médico", ", ".join(sorted(tipos)))
 
 # --- Turno de toma de muestras: queda ATENDIDO al registrar la muestra ---
-fl = requests.get(D + "/api/citas/franjas", params={"dias": 14}, timeout=60).json()[-1]
+# Una franja del laboratorio donde la paciente no tenga ya una cita activa (las pruebas se repiten).
+ocupadas = {x["franja_id"] for x in pedir("GET", "/api/citas/mias", pac, "PACIENTE").json() if x["estado"] != "CANCELADA"}
+fl = next(f for f in reversed(requests.get(D + "/api/citas/franjas", params={"dias": 14}, timeout=60).json())
+          if f["franja_id"] not in ocupadas)
 cm = pedir("POST", "/api/citas", pac, "PACIENTE", json={"franja_id": fl["franja_id"], "tipo": "MUESTRA"}).json()
 sm = pedir("POST", "/api/solicitudes", pac, "PACIENTE", json={"examenes": [glucosa["tipo_examen_id"]], "cita_id": cm["cita_id"]}).json()
 pagar(pac, sm["solicitud_id"])
@@ -131,7 +138,7 @@ ok(c["estado"] == "ATENDIDA", "18. el turno de toma de muestras queda ATENDIDO a
 # --- Ventanilla: paciente sin cuenta, cobro por Stripe con datos de factura ---
 ced = cedula_valida()
 r = pedir("POST", "/api/pacientes", lab, "LABORATORISTA", json={
-    "cedula": ced, "nombres": "Paciente", "apellidos": f"Ventanilla {ced[-4:]}", "fecha_nacimiento": "1980-03-15", "sexo": "M"})
+    "cedula": ced, "nombres": "Paciente", "apellidos": "Ventanilla " + "".join("ABCDEFGHIJ"[int(d)] for d in ced[-4:]), "fecha_nacimiento": "1980-03-15", "sexo": "M"})
 walk = r.json()
 ok(r.status_code == 201, "19. el laboratorista registra un paciente de ventanilla sin cuenta", f"CI {ced}")
 sv = pedir("POST", "/api/solicitudes", lab, "LABORATORISTA", json={"paciente_id": walk["paciente_id"],

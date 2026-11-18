@@ -31,7 +31,7 @@ interface Captura { parametro: Parametro; valor: string }
           @if (tieneResultados()) {
             <button class="secundario" (click)="pdf()">Resultados (PDF)</button>
           }
-          @if (auth.tiene('ADMIN', 'LABORATORISTA') && ['PAGADA', 'EN_PROCESO', 'COMPLETADA'].includes(s.estado)) {
+          @if ((auth.tiene('ADMIN') || (auth.tiene('LABORATORISTA') && s.cobro_ventanilla)) && ['PAGADA', 'EN_PROCESO', 'COMPLETADA'].includes(s.estado)) {
             <button class="secundario" (click)="factura('pdf')">Factura (PDF)</button>
             <button class="secundario" (click)="factura('xml')">Factura (XML)</button>
           }
@@ -49,14 +49,14 @@ interface Captura { parametro: Parametro; valor: string }
               @if (!consumidorFinal) {
                 <div class="fila">
                   <div class="campo"><label for="fi">Cédula o RUC</label><input id="fi" [(ngModel)]="fact.identificacion" maxlength="13" /></div>
-                  <div class="campo"><label for="fn">Nombre o razón social</label><input id="fn" [(ngModel)]="fact.nombre" /></div>
+                  <div class="campo"><label for="fn">Nombre o razón social</label><input id="fn" maxlength="200" [(ngModel)]="fact.nombre" /></div>
                 </div>
                 <div class="fila">
-                  <div class="campo"><label for="fd">Dirección</label><input id="fd" [(ngModel)]="fact.direccion" /></div>
+                  <div class="campo"><label for="fd">Dirección</label><input id="fd" maxlength="250" [(ngModel)]="fact.direccion" /></div>
                 </div>
               }
               <div class="fila">
-                <div class="campo"><label for="fe">Correo para la factura (opcional)</label><input id="fe" type="email" [(ngModel)]="fact.email" /></div>
+                <div class="campo"><label for="fe">Correo para la factura (opcional)</label><input id="fe" type="email" maxlength="150" [(ngModel)]="fact.email" /></div>
               </div>
               <button (click)="cobrar()" [disabled]="guardando() || (!consumidorFinal && (!fact.identificacion || !fact.nombre))">
                 Generar cobro de {{ dinero(s.total) }}</button>
@@ -112,7 +112,7 @@ interface Captura { parametro: Parametro; valor: string }
             @if (auth.tiene('MEDICO')) {
               <form class="fila" (ngSubmit)="observar(ex)">
                 <div class="campo"><label>Nueva observación médica</label>
-                  <textarea [name]="'obs' + ex.detalle_id" [(ngModel)]="observacion[ex.detalle_id]"></textarea></div>
+                  <textarea [name]="'obs' + ex.detalle_id" maxlength="2000" [(ngModel)]="observacion[ex.detalle_id]"></textarea></div>
                 <div class="campo"><button type="submit" [disabled]="!observacion[ex.detalle_id]?.trim()">Guardar observación</button></div>
               </form>
             }
@@ -129,7 +129,7 @@ interface Captura { parametro: Parametro; valor: string }
                       @for (c of capturas[ex.detalle_id]; track c.parametro.parametro_id) {
                         <tr>
                           <td>{{ c.parametro.nombre }}</td>
-                          <td><input [name]="'v' + c.parametro.parametro_id" [(ngModel)]="c.valor" required
+                          <td><input [name]="'v' + c.parametro.parametro_id" maxlength="200" [(ngModel)]="c.valor" required
                                      [placeholder]="c.parametro.valor_ref_texto ? 'texto' : 'número'" /></td>
                           <td>{{ c.parametro.unidad }}</td>
                           <td>{{ rango(c.parametro.valor_ref_min, c.parametro.valor_ref_max, c.parametro.valor_ref_texto) }}</td>
@@ -139,7 +139,7 @@ interface Captura { parametro: Parametro; valor: string }
                   </table>
                 </div>
                 <div class="campo"><label>Observaciones del laboratorio</label>
-                  <textarea [name]="'nota' + ex.detalle_id" [(ngModel)]="notas[ex.detalle_id]"></textarea></div>
+                  <textarea [name]="'nota' + ex.detalle_id" maxlength="1000" [(ngModel)]="notas[ex.detalle_id]"></textarea></div>
                 <button type="submit" [disabled]="guardando()">Guardar resultado</button>
               </form>
             }
@@ -150,7 +150,7 @@ interface Captura { parametro: Parametro; valor: string }
       }
 
       <!-- Receta: el médico la escribe con la propuesta de la base de conocimientos; los demás la consultan. -->
-      @if (tieneResultados() && ['EN_PROCESO', 'COMPLETADA'].includes(s.estado)) {
+      @if (auth.tiene('MEDICO') && tieneResultados() && ['EN_PROCESO', 'COMPLETADA'].includes(s.estado)) {
         @for (k of [cantidadResultados()]; track k) {
           <app-receta [solicitudId]="s.solicitud_id" />
         }

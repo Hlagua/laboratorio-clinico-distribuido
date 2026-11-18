@@ -23,9 +23,9 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
       <div class="campo"><label for="c">Cédula del paciente</label>
         <input id="c" name="cedula" [(ngModel)]="cedula" maxlength="10" /></div>
       <div class="campo"><label for="o">Código</label>
-        <input id="o" name="codigo" [(ngModel)]="codigo" placeholder="SOL-2026-000001" /></div>
+        <input id="o" name="codigo" maxlength="20" [(ngModel)]="codigo" placeholder="SOL-2026-000001" /></div>
       <div class="campo"><label for="pa">Paciente</label>
-        <input id="pa" name="paciente" [(ngModel)]="paciente" placeholder="nombre o apellido" /></div>
+        <input id="pa" name="paciente" maxlength="100" [(ngModel)]="paciente" placeholder="nombre o apellido" /></div>
       <div class="campo"><label for="d">Desde</label><input id="d" type="date" name="desde" [(ngModel)]="desde" /></div>
       <div class="campo"><label for="h">Hasta</label><input id="h" type="date" name="hasta" [(ngModel)]="hasta" /></div>
       @if (auth.tiene('MEDICO')) {

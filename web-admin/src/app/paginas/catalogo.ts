@@ -40,24 +40,24 @@ interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | n
       <form class="card" (ngSubmit)="crearExamen()">
         <h2>Nuevo examen</h2>
         <div class="fila">
-          <div class="campo"><label>Código</label><input name="c" [(ngModel)]="ex.codigo" required /></div>
-          <div class="campo"><label>Nombre</label><input name="n" [(ngModel)]="ex.nombre" required /></div>
+          <div class="campo"><label>Código</label><input name="c" maxlength="20" [(ngModel)]="ex.codigo" required /></div>
+          <div class="campo"><label>Nombre</label><input name="n" maxlength="120" [(ngModel)]="ex.nombre" required /></div>
         </div>
         <div class="fila">
-          <div class="campo"><label>Categoría</label><input name="ca" [(ngModel)]="ex.categoria" list="cats" required />
+          <div class="campo"><label>Categoría</label><input name="ca" maxlength="80" [(ngModel)]="ex.categoria" list="cats" required />
             <datalist id="cats">@for (c of categorias(); track c) { <option [value]="c"></option> }</datalist></div>
-          <div class="campo"><label>Muestra</label><input name="m" [(ngModel)]="ex.tipo_muestra" required /></div>
+          <div class="campo"><label>Muestra</label><input name="m" maxlength="50" [(ngModel)]="ex.tipo_muestra" required /></div>
           <div class="campo"><label>Precio USD</label><input type="number" step="0.01" name="p" [(ngModel)]="ex.precio" required /></div>
         </div>
         <label><input type="checkbox" name="a" [(ngModel)]="ex.requiere_ayuno" /> Requiere ayuno</label>
         <h3>Parámetros</h3>
         @for (p of ex.parametros; track $index) {
           <div class="fila mini">
-            <input placeholder="Nombre" [name]="'pn' + $index" [(ngModel)]="p.nombre" />
-            <input placeholder="Unidad" [name]="'pu' + $index" [(ngModel)]="p.unidad" />
+            <input placeholder="Nombre" [name]="'pn' + $index" maxlength="100" [(ngModel)]="p.nombre" />
+            <input placeholder="Unidad" [name]="'pu' + $index" maxlength="30" [(ngModel)]="p.unidad" />
             <input type="number" placeholder="Mín" [name]="'pmi' + $index" [(ngModel)]="p.valor_ref_min" />
             <input type="number" placeholder="Máx" [name]="'pma' + $index" [(ngModel)]="p.valor_ref_max" />
-            <input placeholder="o texto (Negativo)" [name]="'pt' + $index" [(ngModel)]="p.valor_ref_texto" />
+            <input placeholder="o texto (Negativo)" [name]="'pt' + $index" maxlength="100" [(ngModel)]="p.valor_ref_texto" />
           </div>
         }
         <div class="fila">

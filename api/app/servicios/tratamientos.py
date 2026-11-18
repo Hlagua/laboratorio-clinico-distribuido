@@ -38,14 +38,12 @@ def mis_tratamientos():
 
 
 @bp.get("/tratamientos")
-@requiere("MEDICO", "ADMIN")
+@requiere("MEDICO")     # datos clínicos: solo el médico (y el paciente, en /tratamientos/mios)
 def buscar_tratamientos():
     if request.args.get("paciente_id"):
         return jsonify(db.leer(SQL_TRATAMIENTOS + " WHERE t.paciente_id = ? ORDER BY t.fecha_inicio DESC",
                                request.args.get("paciente_id", type=int)))
-    if rol_actual() == "MEDICO":
-        return jsonify(db.leer(SQL_TRATAMIENTOS + " WHERE t.medico_id = ? ORDER BY t.fecha_inicio DESC", perfil("medico_id")))
-    return jsonify(db.leer(SQL_TRATAMIENTOS + " ORDER BY t.tratamiento_id DESC")[:200])
+    return jsonify(db.leer(SQL_TRATAMIENTOS + " WHERE t.medico_id = ? ORDER BY t.fecha_inicio DESC", perfil("medico_id")))
 
 
 @bp.patch("/tratamientos/<int:tratamiento_id>")

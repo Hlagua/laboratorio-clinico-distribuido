@@ -181,6 +181,10 @@ def obtener_solicitud(solicitud_id: int, codigo: str | None = None) -> dict:
                         for x in valores if d["resultado_id"] and x["resultado_id"] == d["resultado_id"]]
         d["observaciones_medicas"] = [o for o in observaciones if d["resultado_id"] and o["resultado_id"] == d["resultado_id"]]
     s["examenes"] = detalles
+    # Cobrada en ventanilla (con datos de factura): el laboratorio puede entregar la factura impresa.
+    s["cobro_ventanilla"] = bool(db.leer_uno(
+        "SELECT pago_id FROM {e}.pago WHERE solicitud_id = ? AND factura_identificacion IS NOT NULL "
+        "AND estado IN ('APROBADO', 'REEMBOLSO_PARCIAL', 'REEMBOLSADO')", s["solicitud_id"]))
     # Resumen del cobro: los precios incluyen IVA; se muestra separado al final.
     s.update(factura.desglose([d["precio_unitario"] for d in detalles if d["estado"] != "ANULADO"]))
     return s

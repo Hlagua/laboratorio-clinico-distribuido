@@ -88,17 +88,17 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
       <form class="card" (ngSubmit)="guardarMedicamento()">
         <h2>Agregar o actualizar un medicamento</h2>
         <div class="fila">
-          <div class="campo"><label>Nombre genérico</label><input name="mn" [(ngModel)]="med.nombre" required /></div>
-          <div class="campo"><label>Presentación</label><input name="mp" [(ngModel)]="med.presentacion" placeholder="Tableta 500 mg" required /></div>
-          <div class="campo"><label>Vía</label><input name="mv" [(ngModel)]="med.via" /></div>
+          <div class="campo"><label>Nombre genérico</label><input name="mn" maxlength="120" [(ngModel)]="med.nombre" required /></div>
+          <div class="campo"><label>Presentación</label><input name="mp" maxlength="120" [(ngModel)]="med.presentacion" placeholder="Tableta 500 mg" required /></div>
+          <div class="campo"><label>Vía</label><input name="mv" maxlength="30" [(ngModel)]="med.via" /></div>
         </div>
         <div class="fila">
-          <div class="campo"><label>Dosis</label><input name="md" [(ngModel)]="med.dosis" placeholder="1 tableta (500 mg)" required /></div>
-          <div class="campo"><label>Frecuencia</label><input name="mf" [(ngModel)]="med.frecuencia" placeholder="cada 12 horas" required /></div>
+          <div class="campo"><label>Dosis</label><input name="md" maxlength="60" [(ngModel)]="med.dosis" placeholder="1 tableta (500 mg)" required /></div>
+          <div class="campo"><label>Frecuencia</label><input name="mf" maxlength="60" [(ngModel)]="med.frecuencia" placeholder="cada 12 horas" required /></div>
           <div class="campo"><label>Duración (días)</label><input name="mdu" type="number" min="1" [(ngModel)]="med.duracion_dias" /></div>
         </div>
-        <div class="campo"><label>Indicaciones (cómo tomarlo)</label><textarea name="mi" [(ngModel)]="med.indicaciones" required></textarea></div>
-        <div class="campo"><label>Advertencias</label><input name="ma" [(ngModel)]="med.advertencias" /></div>
+        <div class="campo"><label>Indicaciones (cómo tomarlo)</label><textarea name="mi" maxlength="1000" [(ngModel)]="med.indicaciones" required></textarea></div>
+        <div class="campo"><label>Advertencias</label><input name="ma" maxlength="500" [(ngModel)]="med.advertencias" /></div>
         <div class="campo"><label>Se sugiere para (diagnósticos)</label>
           <select name="mdx" multiple size="5" [(ngModel)]="med.diagnosticos">
             @for (d of diagnosticos(); track d.diagnostico_id) { <option [ngValue]="d.diagnostico_id">{{ d.codigo_cie10 }} · {{ d.nombre }}</option> }
@@ -109,7 +109,7 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
       <form class="card" (ngSubmit)="guardar()">
         <h2>Nueva regla (o reemplazar una existente con el mismo código)</h2>
         <div class="fila">
-          <div class="campo"><label>Código</label><input name="c" [(ngModel)]="n.codigo" placeholder="R-..." required /></div>
+          <div class="campo"><label>Código</label><input name="c" maxlength="30" [(ngModel)]="n.codigo" placeholder="R-..." required /></div>
           <div class="campo" style="flex: 2"><label>Diagnóstico</label>
             <select name="d" [(ngModel)]="n.diagnostico_id" required>
               @for (d of diagnosticos(); track d.diagnostico_id) { <option [ngValue]="d.diagnostico_id">{{ d.codigo_cie10 }} · {{ d.nombre }}</option> }
@@ -138,10 +138,10 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
           </div>
         }
         <button type="button" class="secundario chico" (click)="n.condiciones.push(condicion())">+ Condición</button>
-        <div class="campo"><label>Recomendación al médico</label><input name="r" [(ngModel)]="n.recomendacion" required /></div>
+        <div class="campo"><label>Recomendación al médico</label><input name="r" maxlength="500" [(ngModel)]="n.recomendacion" required /></div>
         <div class="fila">
-          <div class="campo"><label>Fuente</label><input name="f" [(ngModel)]="n.fuente" /></div>
-          <div class="campo"><label>Guía clínica (clave en MongoDB)</label><input name="g" [(ngModel)]="n.guia_clave" placeholder="diabetes, anemia…" /></div>
+          <div class="campo"><label>Fuente</label><input name="f" maxlength="200" [(ngModel)]="n.fuente" /></div>
+          <div class="campo"><label>Guía clínica (clave en MongoDB)</label><input name="g" maxlength="50" [(ngModel)]="n.guia_clave" placeholder="diabetes, anemia…" /></div>
         </div>
         <button type="submit">Guardar regla</button>
       </form>

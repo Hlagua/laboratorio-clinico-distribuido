@@ -142,7 +142,7 @@ def _solicitud(solicitud_id: int) -> dict:
 
 
 @bp.get("/recetas/solicitud/<int:solicitud_id>")
-@requiere("MEDICO", "ADMIN", "PACIENTE", "LABORATORISTA")
+@requiere("MEDICO", "PACIENTE")     # la receta es dato clínico: solo médico y paciente
 def recetas_de_solicitud(solicitud_id: int):
     """Recetas de la solicitud. Al médico le llega además su receta y la sugerencia de la base de conocimientos."""
     _solicitud(solicitud_id)
@@ -185,7 +185,7 @@ def guardar_receta(solicitud_id: int):
 
 
 @bp.get("/recetas/<int:receta_id>/pdf")
-@requiere("MEDICO", "ADMIN", "PACIENTE", "LABORATORISTA")
+@requiere("MEDICO", "PACIENTE")     # la receta es dato clínico: solo médico y paciente
 def receta_pdf(receta_id: int):
     r = db.leer_uno(SQL_RECETAS + " WHERE r.receta_id = ?", receta_id)
     if not r:

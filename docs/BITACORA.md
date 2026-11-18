@@ -97,6 +97,9 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D45 | **Agenda por médico** (`franja_horaria.medico_id`, NULL = laboratorio) y **control agendado por el médico** (`origen = 'MEDICO'`, vence 2 h antes de la hora) | Separa los turnos del laboratorio de los turnos de cada médico. Revierte en parte D36: el médico ahora ve la agenda, pero únicamente con **sus** consultas. La cita de control la agenda el médico desde la consulta y el paciente tiene hasta 2 h antes para pagarla. | Una sola agenda compartida; vencimiento de 30 min también para el control |
 | D46 | **Cobro en ventanilla solo por la pasarela (Stripe Checkout)**, con QR para el celular o pago en pantalla, y datos de factura en el pago (`pago.factura_*` o consumidor final `9999999999999`) | Resuelve el cobro de pacientes de ventanilla sin cuenta y permite facturar a un tercero (RUC/cédula o consumidor final código 07). Se quitó del portal el botón de transferencia manual para que todo cobro de usuario pase por la pasarela. | Pago en efectivo sin pasarela; datos de factura solo en el perfil del paciente |
 | D47 | **Reglas operativas de citas y usuarios**: el paciente no cancela una cita pagada (409); la cita pasa a `ATENDIDA` al tomar la muestra o finalizar la consulta; el administrador restablece claves | Evita que una cita pagada quede cancelada sin gestión de reembolso, da uso real al estado `ATENDIDA` del modelo y permite recuperar el acceso de cualquier usuario desde administración. | Cancelación libre de citas confirmadas; estado `ATENDIDA` manual |
+| D48 | **La cita de control es gratis**: queda confirmada al agendarla, sin cobro (`10_control_gratis.sql`) | Decisión del equipo: el control para ver los resultados está incluido en la consulta. El paciente puede cancelarlo porque no tiene pago. | Cobrar el control como una consulta nueva |
+| D49 | **Tratamientos y recetas solo para el médico y el paciente** | Son datos clínicos. El laboratorio y la administración ven los datos del paciente y sus exámenes, no sus tratamientos ni recetas (403 en la API). La factura la ve el laboratorio solo si cobró en ventanilla. | Dejar que el personal vea todo |
+| D50 | **El sistema del personal no se traba tras un despliegue** | Una pestaña abierta pedía archivos de la versión anterior; Nginx devolvía index.html en su lugar y la navegación fallaba sin aviso. Ahora un archivo inexistente da 404, `index.html` va sin caché y, si una sección no carga, la página se recarga sola en esa dirección. | Pedir al usuario que recargue |
 
 ## 5. Registro cronológico
 
@@ -404,6 +407,14 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
   - Réplica en Supabase: **31/31 tablas consistentes**.
   - Reglas de red actualizadas a la IP actual del equipo en `lab-vm2-nsg/SSH-solo-equipo` y en el firewall de Azure SQL (`henry-pc-actual`).
 - **VM apagadas:** verificado en Azure que `ad-2026` y `lab-vm2` quedaron en estado `VM deallocated`.
+
+### 2026-11-18 — Ajustes de la revisión en vivo (D48–D50)
+- Formularios:
+  - límites en todos los campos de texto del personal, según la columna o la API, con contador en el motivo del control y en las observaciones;
+  - nombres sin espacio inicial ni espacios dobles;
+  - fecha de nacimiento entre 1900 y hoy (máximo 120 años) en los formularios y en la API (422).
+- Control gratis (D48); tratamientos y recetas solo para el médico y el paciente (D49); el sistema ya no se traba tras un despliegue (D50).
+- Pruebas: consulta 25/25, receta 11/11, factura 10/10, cita 6/6. Fechas de 1700 y futuras: 422. Administrador y laboratorista: 403 en tratamientos y recetas. Nginx: un archivo inexistente responde 404.
 
 ## 6. Pendientes
 

@@ -15,9 +15,10 @@ bp = Blueprint("citas", __name__, url_prefix="/api/citas")
 # - MUESTRA: turno para la toma de muestras en el laboratorio (franjas sin médico).
 # - CONSULTA: consulta con un médico (franjas de su agenda). Se cobra por Stripe
 #   como una solicitud CONSULTA de una línea ("Consulta médica").
-# Una cita se confirma cuando se paga su solicitud (sp_confirmar_pago). Si no se
-# paga, el sincronizador la cancela: a los MINUTOS_PARA_PAGAR si la reservó el
-# paciente, o HORAS_ANTES_CONTROL antes de la hora si la agendó el médico (control).
+# Una cita se confirma cuando se paga su solicitud (sp_confirmar_pago); si no se
+# paga en MINUTOS_PARA_PAGAR, el sincronizador la cancela. La cita de CONTROL que
+# agenda el médico está incluida en la consulta: queda confirmada y sin cobro
+# (10_control_gratis.sql). HORAS_ANTES_CONTROL queda por compatibilidad.
 MINUTOS_PARA_PAGAR = 30
 HORAS_ANTES_CONTROL = 2
 
@@ -152,7 +153,7 @@ def reservar():
 @bp.post("/control")
 @requiere("MEDICO")
 def agendar_control():
-    """El médico agenda la cita de control en su propia agenda. El paciente la paga hasta 2 h antes."""
+    """El médico agenda la cita de control en su propia agenda. Está incluida en la consulta: sin cobro."""
     d = cuerpo()
     paciente_id = entero(d, "paciente_id")
     cita_id = db.ejecutar_sp(
@@ -161,12 +162,11 @@ def agendar_control():
         usuario_id=usuario_actual()["usuario_id"], instancia_api=config.INSTANCIA)
     cita = _con_vencimiento([db.leer_uno(SQL_CITAS + " WHERE c.cita_id = ?", cita_id)])[0]
     persona = db.leer_uno("SELECT pa.persona_id FROM {e}.paciente pa WHERE pa.paciente_id = ?", paciente_id)
-    vence = (cita["vence_at"] - timedelta(hours=5)).strftime("%d/%m/%Y %H:%M")
     encolar(persona["persona_id"], "CITA_RESERVADA",
             f"Cita de control el {cita['fecha']} a las {str(cita['hora_inicio'])[:5]}",
             f"Dr(a). {cita['medico']} le agendó una cita de control para el {cita['fecha']} a las "
-            f"{str(cita['hora_inicio'])[:5]}. Pague la consulta ({cita['solicitud_codigo']}) desde 'Mis citas' en el "
-            f"portal antes del {vence}; si no, la cita se cancela.")
+            f"{str(cita['hora_inicio'])[:5]}. Está incluida en su consulta: no tiene costo y ya está confirmada. "
+            "Si no puede asistir, cancélela desde 'Mis citas' en el portal.")
     return jsonify(cita), 201
 
 
@@ -201,14 +201,15 @@ def mias():
 @bp.delete("/<int:cita_id>")
 @requiere("PACIENTE", "ADMIN")
 def cancelar(cita_id: int):
-    cita = db.leer_uno("SELECT paciente_id, estado FROM {e}.cita WHERE cita_id = ?", cita_id, contingencia=False)
+    cita = db.leer_uno("SELECT paciente_id, estado, origen FROM {e}.cita WHERE cita_id = ?", cita_id, contingencia=False)
     if not cita:
         raise no_encontrado("La cita")
     if rol_actual() == "PACIENTE" and cita["paciente_id"] != perfil("paciente_id"):
         raise prohibido("Solo puede cancelar sus propias citas.")
     # Una cita pagada no la cancela el paciente: quedaría el cobro sin turno. Lo resuelve el laboratorio
     # (reprograma o el administrador cancela y reembolsa).
-    if rol_actual() == "PACIENTE" and cita["estado"] == "CONFIRMADA":
+    # El control agendado por el médico no tiene cobro: el paciente sí puede cancelarlo.
+    if rol_actual() == "PACIENTE" and cita["estado"] == "CONFIRMADA" and cita["origen"] != "MEDICO":
         raise ApiError("Esta cita ya está pagada. Comuníquese con el laboratorio para reprogramarla o solicitar el "
                        "reembolso.", 409, "CITA_PAGADA")
     db.ejecutar_sp("sp_cancelar_cita", cita_id=cita_id, usuario_id=usuario_actual()["usuario_id"])

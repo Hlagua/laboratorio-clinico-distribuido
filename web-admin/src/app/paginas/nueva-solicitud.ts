@@ -1,6 +1,6 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { SoloLetras, SoloNumeros } from '../core/entrada';
+import { Nacimiento, nacimientoValido, SoloLetras, SoloNumeros } from '../core/entrada';
 import { Router } from '@angular/router';
 import { Api, mensajeError } from '../core/api';
 import { dinero } from '../core/formato';
@@ -8,7 +8,7 @@ import { Paciente, Solicitud, TipoExamen } from '../core/modelos';
 
 @Component({
   selector: 'app-nueva-solicitud',
-  imports: [FormsModule, SoloNumeros, SoloLetras],
+  imports: [FormsModule, SoloNumeros, SoloLetras, Nacimiento],
   template: `
     <h1>Nueva solicitud de exámenes</h1>
     <p class="sub">Para pacientes atendidos en ventanilla o por orden médica.</p>
@@ -17,7 +17,7 @@ import { Paciente, Solicitud, TipoExamen } from '../core/modelos';
     <div class="card">
       <h2>1. Paciente</h2>
       <form class="fila" (ngSubmit)="buscarPaciente()">
-        <div class="campo"><label for="b">Cédula o apellido</label><input id="b" name="b" [(ngModel)]="busqueda" required /></div>
+        <div class="campo"><label for="b">Cédula o apellido</label><input id="b" name="b" maxlength="100" [(ngModel)]="busqueda" required /></div>
         <div class="campo"><button type="submit" class="secundario">Buscar</button></div>
       </form>
       @if (pacientes().length && !paciente()) {
@@ -44,14 +44,14 @@ import { Paciente, Solicitud, TipoExamen } from '../core/modelos';
               <div class="campo"><label for="ra">Apellidos</label><input id="ra" name="ra" soloLetras [(ngModel)]="np.apellidos" required /></div>
             </div>
             <div class="fila">
-              <div class="campo"><label for="rf">Nacimiento</label><input id="rf" name="rf" type="date" [(ngModel)]="np.fecha_nacimiento" required /></div>
+              <div class="campo"><label for="rf">Nacimiento</label><input id="rf" name="rf" type="date" nacimiento [(ngModel)]="np.fecha_nacimiento" required /></div>
               <div class="campo"><label for="rs">Sexo</label><select id="rs" name="rs" [(ngModel)]="np.sexo">
                 <option value="F">Femenino</option><option value="M">Masculino</option><option value="O">Sin especificar</option></select></div>
               <div class="campo"><label for="rt">Teléfono</label><input id="rt" name="rt" soloNumeros maxlength="10" [(ngModel)]="np.telefono" /></div>
             </div>
             <div class="fila">
-              <div class="campo"><label for="re">Correo (para la factura y los resultados)</label><input id="re" name="re" type="email" [(ngModel)]="np.email" /></div>
-              <div class="campo"><label for="rd">Dirección</label><input id="rd" name="rd" [(ngModel)]="np.direccion" /></div>
+              <div class="campo"><label for="re">Correo (para la factura y los resultados)</label><input id="re" name="re" type="email" maxlength="150" [(ngModel)]="np.email" /></div>
+              <div class="campo"><label for="rd">Dirección</label><input id="rd" name="rd" maxlength="250" [(ngModel)]="np.direccion" /></div>
             </div>
             <button type="submit" [disabled]="!np.cedula || !np.nombres || !np.apellidos || !np.fecha_nacimiento">Registrar paciente</button>
           </form>
@@ -70,7 +70,8 @@ import { Paciente, Solicitud, TipoExamen } from '../core/modelos';
           </label>
         }
       </div>
-      <div class="campo"><label for="o">Observaciones</label><textarea id="o" [(ngModel)]="observaciones" name="obs"></textarea></div>
+      <div class="campo"><label for="o">Observaciones</label><textarea id="o" maxlength="500" [(ngModel)]="observaciones" name="obs"></textarea>
+        <small class="muted">{{ observaciones.length }}/500</small></div>
       <div class="entre">
         <strong>Total: {{ dinero(total()) }}</strong>
         <button (click)="crear()" [disabled]="!paciente() || !elegidos().size || creando()">Crear solicitud</button>
@@ -104,6 +105,10 @@ export class NuevaSolicitud implements OnInit {
 
   async registrar() {
     this.error.set('');
+    if (!nacimientoValido(this.np.fecha_nacimiento)) {
+      this.error.set('La fecha de nacimiento debe estar entre 1900 y hoy.');
+      return;
+    }
     try {
       const p = await this.api.post<Paciente>('/api/pacientes', {
         ...this.np, telefono: this.np.telefono || null, email: this.np.email || null, direccion: this.np.direccion || null,

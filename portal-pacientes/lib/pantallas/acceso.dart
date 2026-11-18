@@ -29,6 +29,13 @@ class _AccesoState extends State<Acceso> {
   // Controles de escritura: solo dígitos en cédula y teléfono; solo letras (con tildes) y espacios en los nombres.
   static final _soloDigitos = FilteringTextInputFormatter.digitsOnly;
   static final _soloLetras = FilteringTextInputFormatter.allow(RegExp(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' ]"));
+  // Sin espacio al inicio ni dos espacios seguidos.
+  static final _unEspacio = TextInputFormatter.withFunction((anterior, nuevo) {
+    final limpio = nuevo.text.replaceFirst(RegExp(r'^\s+'), '').replaceAll(RegExp(r'\s{2,}'), ' ');
+    return limpio == nuevo.text
+        ? nuevo
+        : TextEditingValue(text: limpio, selection: TextSelection.collapsed(offset: limpio.length));
+  });
   DateTime? _nacimiento;
   String _sexo = 'F';
   bool _enviando = false;
@@ -132,7 +139,7 @@ class _AccesoState extends State<Acceso> {
                             child: TextFormField(
                                 controller: _c['nombres'],
                                 decoration: const InputDecoration(labelText: 'Nombres', counterText: ''),
-                                inputFormatters: [_soloLetras, LengthLimitingTextInputFormatter(50)],
+                                inputFormatters: [_soloLetras, _unEspacio, LengthLimitingTextInputFormatter(50)],
                                 maxLength: 50,
                                 textCapitalization: TextCapitalization.words,
                                 validator: _requerido)),
@@ -141,7 +148,7 @@ class _AccesoState extends State<Acceso> {
                             child: TextFormField(
                                 controller: _c['apellidos'],
                                 decoration: const InputDecoration(labelText: 'Apellidos', counterText: ''),
-                                inputFormatters: [_soloLetras, LengthLimitingTextInputFormatter(50)],
+                                inputFormatters: [_soloLetras, _unEspacio, LengthLimitingTextInputFormatter(50)],
                                 maxLength: 50,
                                 textCapitalization: TextCapitalization.words,
                                 validator: _requerido)),

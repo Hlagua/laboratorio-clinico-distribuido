@@ -1,6 +1,6 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { SoloLetras, SoloNumeros } from '../core/entrada';
+import { Nacimiento, nacimientoValido, SoloLetras, SoloNumeros } from '../core/entrada';
 import { Api, mensajeError } from '../core/api';
 import { AuthService, NOMBRE_ROL, Rol } from '../core/auth';
 import { fechaHora } from '../core/formato';
@@ -9,7 +9,7 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
 
 @Component({
   selector: 'app-usuarios',
-  imports: [FormsModule, SoloNumeros, SoloLetras, Paginador],
+  imports: [FormsModule, SoloNumeros, SoloLetras, Nacimiento, Paginador],
   template: `
     <h1>Usuarios y roles</h1>
     <p class="sub">Una persona puede tener varios roles (por ejemplo, un médico que también es paciente).</p>
@@ -17,7 +17,7 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
     <form class="card fila" (ngSubmit)="cargar(1)">
       <div class="campo"><label for="q">Buscar</label>
-        <input id="q" name="q" [(ngModel)]="f.q" placeholder="nombre, apellido, correo o cédula" /></div>
+        <input id="q" name="q" maxlength="100" [(ngModel)]="f.q" placeholder="nombre, apellido, correo o cédula" /></div>
       <div class="campo"><label for="r">Rol</label>
         <select id="r" name="r" [(ngModel)]="f.rol"><option value="">Todos</option>
           @for (r of roles; track r) { <option [value]="r">{{ nombre(r) }}</option> }</select></div>
@@ -55,8 +55,8 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
                   <select [(ngModel)]="rolNuevo[u.usuario_id]"><option value="">—</option>
                     @for (r of roles; track r) { <option [value]="r">{{ nombre(r) }}</option> }</select>
                   @if (rolNuevo[u.usuario_id] === 'MEDICO' || rolNuevo[u.usuario_id] === 'LABORATORISTA') {
-                    <input placeholder="Registro profesional" [(ngModel)]="registro[u.usuario_id]" />
-                    <input placeholder="Especialidad / área" [(ngModel)]="area[u.usuario_id]" />
+                    <input placeholder="Registro profesional" maxlength="30" [(ngModel)]="registro[u.usuario_id]" />
+                    <input placeholder="Especialidad / área" maxlength="100" [(ngModel)]="area[u.usuario_id]" />
                   }
                   <button class="chico" [disabled]="!rolNuevo[u.usuario_id]" (click)="asignar(u)">Agregar</button>
                 </div>
@@ -76,20 +76,20 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
         <div class="campo"><label>Apellidos</label><input name="ap" soloLetras [(ngModel)]="n.apellidos" required /></div>
       </div>
       <div class="fila">
-        <div class="campo"><label>Fecha de nacimiento</label><input type="date" name="fn" [(ngModel)]="n.fecha_nacimiento" required /></div>
+        <div class="campo"><label>Fecha de nacimiento</label><input type="date" name="fn" nacimiento [(ngModel)]="n.fecha_nacimiento" required /></div>
         <div class="campo"><label>Sexo</label><select name="se" [(ngModel)]="n.sexo"><option value="F">Femenino</option><option value="M">Masculino</option><option value="O">Sin especificar</option></select></div>
         <div class="campo"><label>Teléfono</label><input name="te" soloNumeros maxlength="10" [(ngModel)]="n.telefono" /></div>
       </div>
       <div class="fila">
-        <div class="campo"><label>Correo</label><input type="email" name="em" [(ngModel)]="n.email" required /></div>
+        <div class="campo"><label>Correo</label><input type="email" name="em" maxlength="150" [(ngModel)]="n.email" required /></div>
         <div class="campo"><label>Contraseña inicial</label><input type="password" name="pw" [(ngModel)]="n.password" required autocomplete="new-password" /></div>
         <div class="campo"><label>Rol</label><select name="ro" [(ngModel)]="n.rol">
           @for (r of roles; track r) { <option [value]="r">{{ nombre(r) }}</option> }</select></div>
       </div>
       @if (n.rol === 'MEDICO' || n.rol === 'LABORATORISTA') {
         <div class="fila">
-          <div class="campo"><label>Registro profesional</label><input name="rp" [(ngModel)]="n.registro_profesional" required /></div>
-          <div class="campo"><label>{{ n.rol === 'MEDICO' ? 'Especialidad' : 'Área' }}</label><input name="es" [(ngModel)]="n.especialidad_o_area" /></div>
+          <div class="campo"><label>Registro profesional</label><input name="rp" maxlength="30" [(ngModel)]="n.registro_profesional" required /></div>
+          <div class="campo"><label>{{ n.rol === 'MEDICO' ? 'Especialidad' : 'Área' }}</label><input name="es" maxlength="100" [(ngModel)]="n.especialidad_o_area" /></div>
         </div>
       }
       <button type="submit">Crear usuario</button>
@@ -157,6 +157,10 @@ export class Usuarios implements OnInit {
   }
 
   async crear() {
+    if (!nacimientoValido(this.n.fecha_nacimiento)) {
+      this.error.set('La fecha de nacimiento debe estar entre 1900 y hoy.');
+      return;
+    }
     await this.ejecutar(async () => {
       await this.api.post('/api/usuarios', { ...this.n, telefono: this.n.telefono || null,
         registro_profesional: this.n.registro_profesional || null, especialidad_o_area: this.n.especialidad_o_area || null });

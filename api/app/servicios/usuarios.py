@@ -8,7 +8,7 @@ from ..paginacion import donde, listar, rango_fechas
 from ..errores import ApiError
 from ..pdf import pdf_ingresos
 from ..seguridad import ROLES, hash_password, requiere, usuario_actual, validar_password
-from ..validacion import cedula, cuerpo, fecha, nombre, telefono, texto
+from ..validacion import cedula, cuerpo, fecha, nacimiento, nombre, telefono, texto
 
 bp = Blueprint("usuarios", __name__, url_prefix="/api")
 
@@ -53,7 +53,7 @@ def crear_usuario():
     usuario_id = db.ejecutar_sp(
         "sp_crear_usuario", "usuario_id", cedula=cedula(texto(d, "cedula", maximo=10)),
         nombres=nombre(d, "nombres"), apellidos=nombre(d, "apellidos"),
-        fecha_nacimiento=fecha(d, "fecha_nacimiento"), sexo=texto(d, "sexo", maximo=1).upper(),
+        fecha_nacimiento=nacimiento(d), sexo=texto(d, "sexo", maximo=1).upper(),
         telefono=telefono(d), email=texto(d, "email", maximo=150).lower(),
         password_hash=hash_password(password), rol_codigo=rol,
         registro_profesional=texto(d, "registro_profesional", False, 30),
@@ -119,7 +119,7 @@ def registrar_paciente_ventanilla():
     paciente_id = db.ejecutar_sp(
         "sp_registrar_paciente", "paciente_id", cedula=cedula(texto(d, "cedula", maximo=10)),
         nombres=nombre(d, "nombres"), apellidos=nombre(d, "apellidos"),
-        fecha_nacimiento=fecha(d, "fecha_nacimiento"), sexo=sexo, telefono=telefono(d),
+        fecha_nacimiento=nacimiento(d), sexo=sexo, telefono=telefono(d),
         email=email.lower() if email else None, direccion=texto(d, "direccion", False, 250), password_hash=None)
     return jsonify(db.leer_uno(
         "SELECT pa.paciente_id, p.cedula, p.nombres, p.apellidos, p.fecha_nacimiento, p.sexo, p.telefono, p.email, "

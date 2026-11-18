@@ -47,9 +47,9 @@ import { GuiaClinica, Sugerencia } from '../core/modelos';
             @if (abierta() === s.sugerencia_id) {
               <form class="tratamiento" (ngSubmit)="aceptar(s)">
                 <h3>Registrar tratamiento</h3>
-                <div class="campo"><label>Diagnóstico</label><input name="d" [(ngModel)]="t.diagnostico" required /></div>
+                <div class="campo"><label>Diagnóstico</label><input name="d" maxlength="1000" [(ngModel)]="t.diagnostico" required /></div>
                 <div class="campo"><label>Indicaciones (protocolo sugerido, editable)</label>
-                  <textarea name="i" [(ngModel)]="t.indicaciones" required></textarea></div>
+                  <textarea name="i" maxlength="2000" [(ngModel)]="t.indicaciones" required></textarea></div>
                 <div class="fila">
                   <div class="campo"><label>Inicio</label><input type="date" name="fi" [(ngModel)]="t.fecha_inicio" required /></div>
                   <div class="campo"><label>Fin</label><input type="date" name="ff" [(ngModel)]="t.fecha_fin" /></div>

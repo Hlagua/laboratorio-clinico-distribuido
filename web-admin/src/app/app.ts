@@ -10,7 +10,9 @@ const MENU: Enlace[] = [
   { ruta: '/agenda', texto: 'Agenda del día', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
   { ruta: '/solicitudes', texto: 'Solicitudes y resultados', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
   { ruta: '/nueva-solicitud', texto: 'Nueva solicitud', roles: ['LABORATORISTA', 'MEDICO'] },
-  { ruta: '/pacientes', texto: 'Pacientes y tratamientos', roles: ['MEDICO', 'ADMIN', 'LABORATORISTA'] },
+  { ruta: '/pacientes', texto: 'Pacientes y tratamientos', roles: ['MEDICO'] },
+  // El laboratorio y la administración ven solo los datos y los exámenes del paciente, no sus tratamientos.
+  { ruta: '/pacientes', texto: 'Pacientes', roles: ['ADMIN', 'LABORATORISTA'] },
   { ruta: '/pagos', texto: 'Pagos y reembolsos', roles: ['ADMIN'] },
   { ruta: '/usuarios', texto: 'Usuarios y roles', roles: ['ADMIN'] },
   { ruta: '/catalogo', texto: 'Catálogo y franjas', roles: ['ADMIN'] },

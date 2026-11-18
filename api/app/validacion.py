@@ -63,6 +63,17 @@ def fecha(datos: dict, campo: str, requerido: bool = True) -> date | None:
         raise ApiError(f"El campo '{campo}' debe tener formato AAAA-MM-DD.", 422, "TIPO_INVALIDO")
 
 
+def nacimiento(datos: dict, campo: str = "fecha_nacimiento") -> date:
+    """Fecha de nacimiento real: desde 1900 y no en el futuro (máximo 120 años)."""
+    valor = fecha(datos, campo)
+    hoy = date.today()
+    if valor > hoy:
+        raise ApiError("La fecha de nacimiento no puede ser futura.", 422, "FECHA_INVALIDA")
+    if valor < date(max(1900, hoy.year - 120), 1, 1):
+        raise ApiError("La fecha de nacimiento no es válida (máximo 120 años).", 422, "FECHA_INVALIDA")
+    return valor
+
+
 def cedula(valor: str) -> str:
     """Valida cédula ecuatoriana (10 dígitos, provincia y dígito verificador)."""
     if not (valor.isdigit() and len(valor) == 10 and 1 <= int(valor[:2]) <= 24 and int(valor[2]) < 6):

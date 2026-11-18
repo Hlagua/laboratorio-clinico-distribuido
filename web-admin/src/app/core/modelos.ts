@@ -118,6 +118,8 @@ export interface ExamenSolicitado {
 }
 
 export interface Solicitud extends SolicitudResumen {
+  /** Pagada en ventanilla con datos de factura: el laboratorio también puede descargarla. */
+  cobro_ventanilla?: boolean;
   subtotal: number;
   iva: number;
   iva_porcentaje: number;

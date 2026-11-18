@@ -55,7 +55,7 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').tri
           }
         }
         <div class="campo"><label for="dx">Diagnóstico</label>
-          <input id="dx" [(ngModel)]="diagnostico" (ngModelChange)="dxSugerido.set(false)" placeholder="Diagnóstico para la receta" />
+          <input id="dx" maxlength="500" [(ngModel)]="diagnostico" (ngModelChange)="dxSugerido.set(false)" placeholder="Diagnóstico para la receta" />
           @if (dxSugerido()) { <span class="sug">sugerido</span> }
         </div>
 
@@ -70,16 +70,16 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').tri
               <div class="med">
                 <div class="fila-med">
                   <strong>{{ i + 1 }}.</strong>
-                  <input class="nombre" list="vademecum" [(ngModel)]="f.nombre" (ngModelChange)="escribiendo(f)" (blur)="alSalir(f)"
+                  <input class="nombre" list="vademecum" maxlength="120" [(ngModel)]="f.nombre" (ngModelChange)="escribiendo(f)" (blur)="alSalir(f)"
                          placeholder="Escriba el medicamento…" aria-label="Medicamento" />
                   <button type="button" class="secundario chico" (click)="quitar(i)" title="Quitar">✕</button>
                 </div>
                 <div class="mini">
-                  <input [(ngModel)]="f.presentacion" (ngModelChange)="tocado(f)" placeholder="Presentación" />
-                  <input [(ngModel)]="f.dosis" (ngModelChange)="tocado(f)" placeholder="Dosis" />
-                  <input [(ngModel)]="f.frecuencia" (ngModelChange)="tocado(f)" placeholder="Frecuencia" />
+                  <input maxlength="120" [(ngModel)]="f.presentacion" (ngModelChange)="tocado(f)" placeholder="Presentación" />
+                  <input maxlength="60" [(ngModel)]="f.dosis" (ngModelChange)="tocado(f)" placeholder="Dosis" />
+                  <input maxlength="60" [(ngModel)]="f.frecuencia" (ngModelChange)="tocado(f)" placeholder="Frecuencia" />
                   <input type="number" min="1" [(ngModel)]="f.duracion_dias" (ngModelChange)="tocado(f)" placeholder="Días" class="dias" />
-                  <input [(ngModel)]="f.cantidad" placeholder="Cantidad" class="cant" />
+                  <input maxlength="40" [(ngModel)]="f.cantidad" placeholder="Cantidad" class="cant" />
                 </div>
                 @if (f.base) {
                   <small [class]="f.modificado ? 'muted' : 'sug'">{{ f.modificado ? 'modificado por el médico' : 'sugerido' }}</small>
@@ -97,14 +97,14 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').tri
                 <label>{{ i + 1 }}. {{ f.nombre || 'Medicamento' }}
                   @if (f.dosis || f.frecuencia) { <small class="muted">— {{ f.dosis }} {{ f.frecuencia }}{{ f.duracion_dias ? ' por ' + f.duracion_dias + ' días' : '' }}</small> }
                 </label>
-                <textarea rows="2" [(ngModel)]="f.indicaciones" (ngModelChange)="tocado(f)" placeholder="Cómo tomarlo"></textarea>
+                <textarea rows="2" maxlength="1000" [(ngModel)]="f.indicaciones" (ngModelChange)="tocado(f)" placeholder="Cómo tomarlo"></textarea>
                 @if (f.advertencias) { <small class="advertencia">⚠ {{ f.advertencias }}</small> }
               </div>
             }
             <div class="campo">
               <label for="gen">Además (dieta, controles, signos de alarma)
                 @if (genSugerido()) { <span class="sug">sugerido</span> }</label>
-              <textarea id="gen" rows="5" [(ngModel)]="generales" (ngModelChange)="genSugerido.set(false)"></textarea>
+              <textarea id="gen" rows="5" maxlength="2000" [(ngModel)]="generales" (ngModelChange)="genSugerido.set(false)"></textarea>
             </div>
           </section>
         </div>

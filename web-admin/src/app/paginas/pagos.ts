@@ -22,7 +22,7 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
       <div class="campo"><label for="m">Método</label>
         <select id="m" name="m" [(ngModel)]="f.metodo"><option value="">Todos</option>
           <option value="STRIPE">Stripe</option><option value="TRANSFERENCIA_QR">Transferencia</option></select></div>
-      <div class="campo"><label for="q">Paciente o solicitud</label><input id="q" name="q" [(ngModel)]="f.q" /></div>
+      <div class="campo"><label for="q">Paciente o solicitud</label><input id="q" name="q" maxlength="100" [(ngModel)]="f.q" /></div>
       <div class="campo"><label for="d">Desde</label><input id="d" type="date" name="d" [(ngModel)]="f.desde" /></div>
       <div class="campo"><label for="h">Hasta</label><input id="h" type="date" name="h" [(ngModel)]="f.hasta" /></div>
       <div class="campo"><button type="submit">Filtrar</button></div>
@@ -63,7 +63,7 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
           @if (p.metodo === 'STRIPE') { · se devolverá a la tarjeta por Stripe }</p>
         <div class="fila">
           <div class="campo"><label>Monto (USD)</label><input type="number" step="0.01" min="0.01" name="m" [(ngModel)]="monto" required /></div>
-          <div class="campo" style="flex: 3"><label>Motivo</label><input name="mo" [(ngModel)]="motivo" required /></div>
+          <div class="campo" style="flex: 3"><label>Motivo</label><input name="mo" maxlength="300" [(ngModel)]="motivo" required /></div>
         </div>
         <div class="fila">
           <button type="submit" class="peligro" [disabled]="!monto || !motivo">Emitir reembolso</button>
