@@ -100,5 +100,8 @@ server {
     location / {
         root /usr/share/nginx/html/portal;
         try_files $uri $uri/ /index.html;
+        # Flutter no pone huella en el nombre de sus archivos (main.dart.js, fuentes de íconos):
+        # el navegador debe revalidar en cada carga (304 si no cambió) o mostraría la versión anterior.
+        add_header Cache-Control "no-cache";
     }
 }

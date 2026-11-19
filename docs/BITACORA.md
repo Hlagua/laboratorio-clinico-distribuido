@@ -106,6 +106,7 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D54 | **Cada médico arma su horario**: días de la semana y bloques con su propia duración (p. ej. mañana cada 30 min, tarde cada 60) | La agenda se genera desde "Mi horario" (o el administrador por cualquier médico); no se pisan turnos existentes y se pueden quitar los libres. El paciente puede **reagendar** su cita a otro horario libre del mismo tipo y médico, hasta 30 días, sin perder el pago. | Duración fija para todos |
 | D55 | **Centro de notificaciones** en los dos portales con los mismos avisos que se envían por correo | El usuario ve sus avisos (pagos, resultados, recetas, citas) aunque no revise el correo; los "nuevos" se marcan en el navegador, sin columna nueva en la base. | Solo correo |
 | D56 | **Varios laboratorios** (el administrador los crea) y **resultado externo en PDF guardado en MongoDB** | Supabase es réplica de solo lectura; MongoDB es la parte documental, por eso ahí van los PDF. El paciente o el médico eligen otro laboratorio (no se cobra aquí); se sube el PDF, el sistema lee los valores (`pypdf`) y el laboratorista los registra; el médico los ve como cualquier resultado. | Guardar el PDF en Azure SQL (se replicaría a Supabase sin necesidad) |
+| D57 | **Login con fotos**: galería a la izquierda (escritorio) o franja arriba (celular), formulario a la derecha | Pedido del equipo, a la manera de los portales de salud. Tres fotos de uso libre de Unsplash (tubos, médico con paciente, microscopio), optimizadas (~150 KB c/u), que rotan cada 6 s con un mensaje cada una. Nginx revalida los archivos del portal en cada carga (`Cache-Control: no-cache`): Flutter no versiona el nombre de sus archivos y el navegador mostraba íconos viejos. | Imágenes de otra marca (derechos) o ilustraciones dibujadas |
 
 ## 5. Registro cronológico
 
@@ -443,6 +444,11 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
   - laboratorio externo: PDF subido, valor leído (glucosa 142), guardado en MongoDB, registrado por el laboratorista y visto por el médico con ↑ alto.
 - Regresión: consulta 25/25, receta 11/11, cita 6/6, factura 10/10; réplica CONSISTENTE en 32 tablas (versión 1308).
 - Para las pruebas se generaron turnos de laboratorio de los próximos 30 días.
+
+### 2026-11-19 — Login con fotos (D57)
+- `portal-pacientes/lib/pantallas/galeria.dart` y `assets/img/` (licencia Unsplash, con crédito "Fotos: Unsplash" en la galería).
+- Revisado en el navegador en escritorio (1280 px) y celular (375 px); en el registro, el selector de sexo tiene ancho fijo para que la fecha de nacimiento no quede apretada.
+- Nginx: `Cache-Control: no-cache` en el portal (revalidación con 304; no se vuelve a descargar lo que no cambió).
 
 ## 6. Pendientes
 

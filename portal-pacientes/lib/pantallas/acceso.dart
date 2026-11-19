@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../api.dart';
 import '../comun.dart';
 import '../main.dart';
+import 'galeria.dart';
 
 /// Login único de la plataforma y registro de pacientes.
 ///
@@ -142,13 +143,12 @@ class _AccesoState extends State<Acceso> {
   @override
   Widget build(BuildContext context) {
     final reg = widget.registro;
-    return Scaffold(
-      appBar: AppBar(title: Text(reg ? 'Crear cuenta' : 'Ingresar'), backgroundColor: verdeOscuro, foregroundColor: Colors.white),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Centrado(
-          ancho: 520,
-          child: Card(
+    // La tarjeta del formulario: sin sombra, sobre fondo claro, junto a las fotos.
+    final formulario = Card(
+            elevation: 0,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade300)),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Form(
@@ -212,6 +212,7 @@ class _AccesoState extends State<Acceso> {
                         ),
                         const SizedBox(width: 12),
                         DropdownMenu<String>(
+                          width: 150,
                           initialSelection: _sexo,
                           label: const Text('Sexo'),
                           onSelected: (v) => _sexo = v ?? 'F',
@@ -301,8 +302,53 @@ class _AccesoState extends State<Acceso> {
                 ),
               ),
             ),
-          ),
+          );
+    final panel = SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Volver al inicio'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(reg ? 'Crear cuenta' : 'Ingresar',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700, color: verdeOscuro)),
+            const SizedBox(height: 16),
+            formulario,
+            const SizedBox(height: 16),
+            const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.lock_outline, size: 16, color: Colors.grey),
+              SizedBox(width: 6),
+              Flexible(
+                child: Text('Conexión segura. Sus datos y resultados solo los ven usted y su médico.',
+                    style: TextStyle(color: Colors.grey, fontSize: 12)),
+              ),
+            ]),
+          ]),
         ),
+      ),
+    );
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F7F6),
+      body: LayoutBuilder(
+        builder: (context, c) => c.maxWidth >= 900
+            // Escritorio: fotos a la izquierda, formulario a la derecha.
+            ? Row(children: [
+                const Expanded(flex: 11, child: Galeria()),
+                Expanded(flex: 9, child: panel),
+              ])
+            // Celular: una franja con la foto arriba y el formulario debajo.
+            : Column(children: [
+                const SizedBox(height: 210, width: double.infinity, child: Galeria(compacta: true)),
+                Expanded(child: panel),
+              ]),
       ),
     );
   }
