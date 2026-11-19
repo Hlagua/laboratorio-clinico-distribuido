@@ -18,7 +18,7 @@ TABLAS = ["persona", "usuario", "rol", "permiso", "rol_permiso", "usuario_rol", 
           "categoria_examen", "tipo_examen", "parametro_examen", "franja_horaria", "cita", "solicitud_examen",
           "solicitud_detalle", "resultado", "resultado_valor", "observacion_medica", "tratamiento", "pago", "reembolso",
           "diagnostico", "protocolo", "regla_diagnostica", "regla_condicion", "sugerencia_diagnostica",
-          "medicamento", "diagnostico_medicamento", "receta", "receta_item"]
+          "medicamento", "diagnostico_medicamento", "receta", "receta_item", "laboratorio"]
 
 c = credenciales()
 az = azure_sql_admin()

@@ -9,6 +9,7 @@ TABLAS_SUPABASE = [
     "paciente", "medico", "laboratorista",
     "categoria_examen", "tipo_examen", "parametro_examen",
     "franja_horaria", "cita",
+    "laboratorio",          # 12_laboratorios.sql (antes de solicitud_examen, que la referencia)
     "solicitud_examen", "solicitud_detalle", "resultado", "resultado_valor",
     "observacion_medica", "tratamiento",
     "pago", "reembolso",

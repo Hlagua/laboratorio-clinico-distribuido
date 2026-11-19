@@ -4,6 +4,7 @@ import '../api.dart';
 import '../comun.dart';
 import '../main.dart';
 import 'citas.dart';
+import 'extras.dart';
 import 'solicitud.dart';
 
 /// Panel del paciente autenticado.
@@ -40,6 +41,7 @@ class _PanelState extends State<Panel> {
               icon: const Icon(Icons.swap_horiz, color: Colors.white),
               label: const Text('Cambiar de rol', style: TextStyle(color: Colors.white)),
             ),
+          Campana(key: ValueKey('campana$_version')),
           IconButton(tooltip: 'Actualizar', onPressed: _recargar, icon: const Icon(Icons.refresh)),
           TextButton(
             onPressed: () {
@@ -126,6 +128,14 @@ class _PanelState extends State<Panel> {
             trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
               Etiqueta(estado),
               // Una cita pagada no se cancela desde aquí: la reprograma o reembolsa el laboratorio.
+              // Reagendar: mismo tipo de cita (y mismo médico) a otro horario libre, hasta 30 días.
+              if ((pendiente || estado == 'CONFIRMADA') && (c['fecha'] as String).compareTo(hoyIso()) >= 0)
+                IconButton(
+                    tooltip: 'Reagendar',
+                    icon: const Icon(Icons.edit_calendar),
+                    onPressed: () async {
+                      if (await reagendarCita(context, c)) _recargar();
+                    }),
               if (pendiente || (control && estado == 'CONFIRMADA'))
                 IconButton(tooltip: 'Cancelar cita', icon: const Icon(Icons.close), onPressed: () => _cancelar(c)),
             ]),
@@ -162,7 +172,7 @@ class _PanelState extends State<Panel> {
           else if (estado == 'CONFIRMADA' && !control)
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
-              child: Text('Cita pagada. Para reprogramarla o cancelarla, comuníquese con el laboratorio.',
+              child: Text('Cita pagada. Puede reagendarla con el botón del calendario; para cancelarla, comuníquese con el laboratorio.',
                   style: TextStyle(color: Colors.grey, fontSize: 12)),
             ),
           if (solicitudId != null && estado == 'CONFIRMADA' && !consulta)
@@ -311,6 +321,7 @@ class _ListaState extends State<_Lista> {
           return ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 90), children: [
             TextField(
               controller: _buscar,
+              inputFormatters: [sinEmojis],
               decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar por código, examen, fecha o estado'),
               onChanged: (_) => setState(() => _pagina = 0),
             ),

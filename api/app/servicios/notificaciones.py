@@ -17,7 +17,7 @@ from flask import Blueprint, current_app, jsonify, request
 from .. import config, db
 from ..errores import ApiError
 from ..paginacion import donde, listar as listar_paginado, rango_fechas
-from ..seguridad import requiere
+from ..seguridad import requiere, usuario_actual
 from ..validacion import cuerpo, texto
 
 bp = Blueprint("notificaciones", __name__, url_prefix="/api/notificaciones")
@@ -197,3 +197,13 @@ def prueba():
     except Exception as e:
         raise ApiError(f"No se pudo enviar el correo: {e}", 502, "MAILJET_ERROR")
     return jsonify(enviado=True, mailjet_message_id=msg_id, instancia=config.INSTANCIA)
+
+
+@bp.get("/mias")
+@requiere()
+def mis_notificaciones():
+    """Centro de notificaciones: los últimos avisos del usuario (los mismos que se le envían por correo)."""
+    return jsonify(db.leer(
+        "SELECT notificacion_id, tipo, asunto, cuerpo, estado, created_at, enviada_at FROM {e}.notificacion "
+        "WHERE persona_id = ? ORDER BY notificacion_id DESC OFFSET 0 ROWS FETCH NEXT 50 ROWS ONLY",
+        usuario_actual()["persona_id"], contingencia=False))

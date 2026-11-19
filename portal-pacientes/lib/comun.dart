@@ -1,4 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Quita los emojis de cualquier campo de texto (no se aceptan en el sistema).
+final sinEmojis = FilteringTextInputFormatter.deny(
+    RegExp(r'[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]', unicode: true));
+
+/// Correo con caracteres simples: letras sin tilde, números y . _ % + - antes y después de la @.
+final correoValido = RegExp(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$');
+final soloCaracteresCorreo = FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9._%+@-]'));
+
+/// Rol con el que se entra por defecto: el más alto que tenga la persona.
+const ordenRoles = ['ADMIN', 'MEDICO', 'LABORATORISTA', 'PACIENTE'];
 
 /// Colores y utilidades compartidas por las pantallas del portal.
 const verde = Color(0xFF0B6E4F);
@@ -39,6 +51,9 @@ Future<String?> elegirRol(BuildContext context, List<String> roles, {String? act
     ),
   );
 }
+
+/// Fecha de hoy (hora local) en formato AAAA-MM-DD.
+String hoyIso() => DateTime.now().toIso8601String().substring(0, 10);
 
 String dinero(dynamic v) => v == null ? '' : 'USD ${(v as num).toStringAsFixed(2)}';
 String hora(dynamic h) {

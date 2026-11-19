@@ -99,6 +99,9 @@ class Api {
   Future<dynamic> post(String ruta, [Object? cuerpo]) =>
       _procesar(http.post(_uri(ruta), headers: _cabeceras, body: jsonEncode(cuerpo ?? {})));
 
+  Future<dynamic> put(String ruta, [Object? cuerpo]) =>
+      _procesar(http.put(_uri(ruta), headers: _cabeceras, body: jsonEncode(cuerpo ?? {})));
+
   Future<dynamic> delete(String ruta) => _procesar(http.delete(_uri(ruta), headers: _cabeceras));
 
   Future<dynamic> _procesar(Future<http.Response> peticion) async {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../comun.dart';
 import '../main.dart';
+import 'extras.dart';
 
 /// Detalle de una solicitud: resultados, PDF y pago.
 class DetalleSolicitud extends StatefulWidget {
@@ -59,7 +60,9 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
                   : '${fechaHora(s['created_at'])} · Total ${dinero(s['total'])}'
                       '${s['medico_id'] != null ? ' · Ordenado por ${s['medico']}' : ''}'),
               const SizedBox(height: 12),
-              if (s['estado'] == 'REGISTRADA')
+              // Elegir otro laboratorio (antes de pagar) o, si ya es externo, subir su resultado en PDF.
+              OtroLaboratorio(s: s, alCambiar: () => setState(() => _s = _cargar())),
+              if (s['estado'] == 'REGISTRADA' && s['laboratorio_propio'] != false)
                 Card(
                   color: const Color(0xFFFFF4D6),
                   child: Padding(
@@ -302,6 +305,7 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
               Expanded(
                 child: ListView(padding: const EdgeInsets.all(12), children: [
                   TextField(
+                    inputFormatters: [sinEmojis],
                     decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar examen o categoría'),
                     onChanged: (v) => setState(() {
                       _buscar = v.trim().toLowerCase();

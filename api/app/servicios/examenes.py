@@ -16,6 +16,7 @@ log = logging.getLogger("api")
 
 SQL_SOLICITUDES = """
 SELECT s.solicitud_id, s.codigo, s.estado, s.total, s.observaciones, s.created_at, s.cita_id, s.tipo,
+       s.laboratorio_id, lb.nombre AS laboratorio, lb.propio AS laboratorio_propio,
        pa.paciente_id, p.cedula, CONCAT(p.nombres, ' ', p.apellidos) AS paciente,
        s.medico_id, CONCAT(pm.nombres, ' ', pm.apellidos) AS medico,
        (SELECT STRING_AGG(t.nombre, ', ') FROM {e}.solicitud_detalle sd
@@ -25,6 +26,7 @@ JOIN {e}.paciente pa ON pa.paciente_id = s.paciente_id
 JOIN {e}.persona p ON p.persona_id = pa.persona_id
 LEFT JOIN {e}.medico m ON m.medico_id = s.medico_id
 LEFT JOIN {e}.persona pm ON pm.persona_id = m.persona_id
+LEFT JOIN {e}.laboratorio lb ON lb.laboratorio_id = s.laboratorio_id
 """
 
 
@@ -80,6 +82,11 @@ def crear_solicitud():
         examenes=json.dumps(lista_enteros(d, "examenes")), medico_id=medico_id,
         cita_id=entero(d, "cita_id", False), observaciones=texto(d, "observaciones", False),
         usuario_id=usuario_actual()["usuario_id"])
+    # El médico (o el personal) puede indicar que los exámenes se harán en otro laboratorio.
+    laboratorio_id = entero(d, "laboratorio_id", False)
+    if laboratorio_id:
+        db.ejecutar_sp("sp_cambiar_laboratorio", solicitud_id=solicitud_id, laboratorio_id=laboratorio_id,
+                       usuario_id=usuario_actual()["usuario_id"])
     s = obtener_solicitud(solicitud_id)
     if rol == "MEDICO":
         # El paciente se entera por correo de los exámenes que le ordenó su médico y de cómo pagarlos.

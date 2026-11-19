@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
 import { claseEstado, dinero, fechaHora, hora, textoEstado } from '../core/formato';
-import { Cita, Franja, Paciente, SolicitudResumen, TipoExamen, Tratamiento } from '../core/modelos';
+import { Cita, Franja, Laboratorio, Paciente, SolicitudResumen, TipoExamen, Tratamiento } from '../core/modelos';
 
 /**
  * Consulta médica: el médico revisa al paciente, le ordena exámenes y le agenda la cita de control.
@@ -67,6 +67,12 @@ import { Cita, Franja, Paciente, SolicitudResumen, TipoExamen, Tratamiento } fro
                 {{ t.nombre }} <small class="muted">{{ dinero(t.precio) }}{{ t.requiere_ayuno ? ' · ayuno' : '' }}</small></label>
             }
           </div>
+          <div class="campo"><label for="lab">Laboratorio</label>
+            <select id="lab" [(ngModel)]="laboratorioId">
+              @for (l of laboratorios(); track l.laboratorio_id) {
+                <option [ngValue]="l.laboratorio_id">{{ l.nombre }}{{ l.propio ? ' (nuestro)' : ' (externo: se paga allá y sube el PDF)' }}</option>
+              }
+            </select></div>
           <p>{{ elegidos().size }} examen(es) · {{ dinero(totalElegidos()) }}</p>
           <button (click)="ordenar()" [disabled]="!elegidos().size || ocupado()">Ordenar exámenes</button>
           @if (ordenada(); as o) {
@@ -146,6 +152,8 @@ export class Consulta implements OnInit {
   protected readonly aviso = signal('');
   protected readonly ocupado = signal(false);
   protected motivoControl = 'Control con resultados';
+  protected readonly laboratorios = signal<Laboratorio[]>([]);
+  protected laboratorioId: number | null = null;
 
   protected readonly catalogoFiltrado = computed(() => {
     const q = this.q().trim().toLowerCase();
@@ -171,6 +179,8 @@ export class Consulta implements OnInit {
       this.historial.set(historial);
       this.tratamientos.set(tratamientos);
       this.catalogo.set(catalogo);
+      this.laboratorios.set(await this.api.get<Laboratorio[]>('/api/laboratorios'));
+      this.laboratorioId = this.laboratorios().find((l) => l.propio)?.laboratorio_id ?? null;
       // El control, después de la fecha de esta consulta.
       this.franjas.set(franjas.filter((f) => f.fecha > c.fecha));
       this.dia.set(this.diasControl()[0] ?? null);
@@ -189,6 +199,7 @@ export class Consulta implements OnInit {
     await this.paso(async () => {
       const s = await this.api.post<SolicitudResumen>('/api/solicitudes', {
         paciente_id: this.cita()!.paciente_id, examenes: [...this.elegidos()],
+        laboratorio_id: this.laboratorios().find((l) => l.laboratorio_id === this.laboratorioId && !l.propio)?.laboratorio_id ?? null,
         observaciones: `Ordenados en la consulta del ${this.cita()!.fecha}`,
       });
       this.ordenada.set(s);

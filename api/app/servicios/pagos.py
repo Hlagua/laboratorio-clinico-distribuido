@@ -21,7 +21,7 @@ from ..errores import ApiError, no_encontrado, prohibido
 from ..paginacion import donde, listar as listar_paginado, rango_fechas
 from ..pdf import pdf_factura
 from ..seguridad import perfil, requiere, rol_actual, usuario_actual
-from ..validacion import cuerpo, decimal, entero, texto
+from ..validacion import correo, cuerpo, decimal, entero, texto
 from .notificaciones import encolar
 
 bp = Blueprint("pagos", __name__, url_prefix="/api/pagos")
@@ -101,12 +101,10 @@ def _datos_factura(d: dict) -> dict:
     ident = str(f.get("identificacion") or "").strip()
     if not ident:
         return {"factura_identificacion": "9999999999999", "factura_nombre": "CONSUMIDOR FINAL",
-                "factura_direccion": None, "factura_email": texto(f, "email", False, 150)}
+                "factura_direccion": None, "factura_email": correo(f, requerido=False)}
     if not ident.isdigit() or len(ident) not in (10, 13):
         raise ApiError("La identificación debe ser una cédula (10 dígitos) o un RUC (13).", 422, "IDENTIFICACION_INVALIDA")
-    email = texto(f, "email", False, 150)
-    if email and "@" not in email:
-        raise ApiError("El correo de facturación no es válido.", 422, "EMAIL_INVALIDO")
+    email = correo(f, requerido=False)
     return {"factura_identificacion": ident, "factura_nombre": texto(f, "nombre", maximo=200),
             "factura_direccion": texto(f, "direccion", False, 250), "factura_email": email}
 

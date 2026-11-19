@@ -8,7 +8,7 @@ from ..paginacion import donde, listar, rango_fechas
 from ..errores import ApiError
 from ..pdf import pdf_ingresos
 from ..seguridad import ROLES, hash_password, requiere, usuario_actual, validar_password
-from ..validacion import cedula, cuerpo, fecha, nacimiento, nombre, telefono, texto
+from ..validacion import cedula, correo, cuerpo, fecha, nacimiento, nombre, telefono, texto
 
 bp = Blueprint("usuarios", __name__, url_prefix="/api")
 
@@ -54,7 +54,7 @@ def crear_usuario():
         "sp_crear_usuario", "usuario_id", cedula=cedula(texto(d, "cedula", maximo=10)),
         nombres=nombre(d, "nombres"), apellidos=nombre(d, "apellidos"),
         fecha_nacimiento=nacimiento(d), sexo=texto(d, "sexo", maximo=1).upper(),
-        telefono=telefono(d), email=texto(d, "email", maximo=150).lower(),
+        telefono=telefono(d), email=correo(d),
         password_hash=hash_password(password), rol_codigo=rol,
         registro_profesional=texto(d, "registro_profesional", False, 30),
         especialidad_o_area=texto(d, "especialidad_o_area", False, 100), admin_id=usuario_actual()["usuario_id"])
@@ -110,9 +110,7 @@ def buscar_pacientes():
 def registrar_paciente_ventanilla():
     """Paciente atendido en ventanilla: queda registrado sin cuenta (puede crearla después en el portal)."""
     d = cuerpo()
-    email = texto(d, "email", False, 150)
-    if email and "@" not in email:
-        raise ApiError("El correo no es válido.", 422, "EMAIL_INVALIDO")
+    email = correo(d, requerido=False)
     sexo = texto(d, "sexo", maximo=1).upper()
     if sexo not in ("M", "F", "O"):
         raise ApiError("Sexo: M, F u O.", 422, "TIPO_INVALIDO")
@@ -120,7 +118,7 @@ def registrar_paciente_ventanilla():
         "sp_registrar_paciente", "paciente_id", cedula=cedula(texto(d, "cedula", maximo=10)),
         nombres=nombre(d, "nombres"), apellidos=nombre(d, "apellidos"),
         fecha_nacimiento=nacimiento(d), sexo=sexo, telefono=telefono(d),
-        email=email.lower() if email else None, direccion=texto(d, "direccion", False, 250), password_hash=None)
+        email=email, direccion=texto(d, "direccion", False, 250), password_hash=None)
     return jsonify(db.leer_uno(
         "SELECT pa.paciente_id, p.cedula, p.nombres, p.apellidos, p.fecha_nacimiento, p.sexo, p.telefono, p.email, "
         "p.direccion, pa.tipo_sangre, pa.alergias FROM {e}.paciente pa JOIN {e}.persona p ON p.persona_id = pa.persona_id "

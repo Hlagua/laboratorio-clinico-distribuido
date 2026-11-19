@@ -26,7 +26,24 @@ def texto(datos: dict, campo: str, requerido: bool = True, maximo: int = 500) ->
     valor = valor.strip()
     if len(valor) > maximo:
         raise ApiError(f"El campo '{campo}' admite máximo {maximo} caracteres.", 422, "LONGITUD")
+    if _EMOJI.search(valor):
+        raise ApiError(f"El campo '{campo}' no admite emojis.", 422, "EMOJI")
     return valor
+
+
+# Emojis y sus modificadores (variación, unión, teclas). No se aceptan en ningún campo de texto.
+_EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE00-\uFE0F\u200D\u20E3]")
+_CORREO = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
+
+
+def correo(datos: dict, campo: str = "email", requerido: bool = True) -> str | None:
+    """Correo con caracteres simples (sin emojis, tildes ni espacios); se guarda en minúsculas."""
+    valor = texto(datos, campo, requerido, 150)
+    if valor is None:
+        return None
+    if not _CORREO.match(valor):
+        raise ApiError("El correo no es válido.", 422, "EMAIL_INVALIDO")
+    return valor.lower()
 
 
 def entero(datos: dict, campo: str, requerido: bool = True) -> int | None:

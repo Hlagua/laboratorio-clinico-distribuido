@@ -194,6 +194,7 @@ class _ReservarCitaState extends State<ReservarCita> {
       TextField(
           controller: _motivo,
           maxLength: 200,
+          inputFormatters: [sinEmojis],
           maxLines: 2,
           minLines: 1,
           decoration: InputDecoration(

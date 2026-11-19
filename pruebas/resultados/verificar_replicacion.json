@@ -1,16 +1,16 @@
 {
-  "hora": "22:16:52",
+  "hora": "22:21:59",
   "supabase": [
     {
       "tabla": "persona",
-      "azure_filas": 19,
-      "supabase_filas": 19,
+      "azure_filas": 25,
+      "supabase_filas": 25,
       "igual": true
     },
     {
       "tabla": "usuario",
-      "azure_filas": 18,
-      "supabase_filas": 18,
+      "azure_filas": 19,
+      "supabase_filas": 19,
       "igual": true
     },
     {
@@ -33,14 +33,14 @@
     },
     {
       "tabla": "usuario_rol",
-      "azure_filas": 19,
-      "supabase_filas": 19,
+      "azure_filas": 20,
+      "supabase_filas": 20,
       "igual": true
     },
     {
       "tabla": "paciente",
-      "azure_filas": 15,
-      "supabase_filas": 15,
+      "azure_filas": 21,
+      "supabase_filas": 21,
       "igual": true
     },
     {
@@ -57,14 +57,14 @@
     },
     {
       "tabla": "categoria_examen",
-      "azure_filas": 4,
-      "supabase_filas": 4,
+      "azure_filas": 5,
+      "supabase_filas": 5,
       "igual": true
     },
     {
       "tabla": "tipo_examen",
-      "azure_filas": 8,
-      "supabase_filas": 8,
+      "azure_filas": 9,
+      "supabase_filas": 9,
       "igual": true
     },
     {
@@ -75,38 +75,38 @@
     },
     {
       "tabla": "franja_horaria",
-      "azure_filas": 96,
-      "supabase_filas": 96,
+      "azure_filas": 404,
+      "supabase_filas": 404,
       "igual": true
     },
     {
       "tabla": "cita",
-      "azure_filas": 30,
-      "supabase_filas": 30,
+      "azure_filas": 63,
+      "supabase_filas": 63,
       "igual": true
     },
     {
       "tabla": "solicitud_examen",
-      "azure_filas": 19,
-      "supabase_filas": 19,
+      "azure_filas": 67,
+      "supabase_filas": 67,
       "igual": true
     },
     {
       "tabla": "solicitud_detalle",
-      "azure_filas": 35,
-      "supabase_filas": 35,
+      "azure_filas": 88,
+      "supabase_filas": 88,
       "igual": true
     },
     {
       "tabla": "resultado",
-      "azure_filas": 21,
-      "supabase_filas": 21,
+      "azure_filas": 41,
+      "supabase_filas": 41,
       "igual": true
     },
     {
       "tabla": "resultado_valor",
-      "azure_filas": 57,
-      "supabase_filas": 57,
+      "azure_filas": 92,
+      "supabase_filas": 92,
       "igual": true
     },
     {
@@ -117,14 +117,14 @@
     },
     {
       "tabla": "tratamiento",
-      "azure_filas": 7,
-      "supabase_filas": 7,
+      "azure_filas": 8,
+      "supabase_filas": 8,
       "igual": true
     },
     {
       "tabla": "pago",
-      "azure_filas": 21,
-      "supabase_filas": 21,
+      "azure_filas": 61,
+      "supabase_filas": 61,
       "igual": true
     },
     {
@@ -159,8 +159,8 @@
     },
     {
       "tabla": "sugerencia_diagnostica",
-      "azure_filas": 8,
-      "supabase_filas": 8,
+      "azure_filas": 22,
+      "supabase_filas": 22,
       "igual": true
     },
     {
@@ -177,14 +177,20 @@
     },
     {
       "tabla": "receta",
-      "azure_filas": 0,
-      "supabase_filas": 0,
+      "azure_filas": 2,
+      "supabase_filas": 2,
       "igual": true
     },
     {
       "tabla": "receta_item",
-      "azure_filas": 0,
-      "supabase_filas": 0,
+      "azure_filas": 2,
+      "supabase_filas": 2,
+      "igual": true
+    },
+    {
+      "tabla": "laboratorio",
+      "azure_filas": 3,
+      "supabase_filas": 3,
       "igual": true
     }
   ],
@@ -192,43 +198,43 @@
     {
       "tabla": "auditoria",
       "coleccion": "auditoria",
-      "azure": 321,
-      "mongo": 321,
+      "azure": 706,
+      "mongo": 706,
       "igual": true
     },
     {
       "tabla": "notificacion",
       "coleccion": "notificaciones",
-      "azure": 36,
-      "mongo": 36,
+      "azure": 141,
+      "mongo": 141,
       "igual": true
     },
     {
       "tabla": "resultado",
       "coleccion": "resultados",
-      "azure": 21,
-      "mongo": 21,
+      "azure": 41,
+      "mongo": 41,
       "igual": true
     },
     {
       "tabla": "pago",
       "coleccion": "pagos",
-      "azure": 21,
-      "mongo": 21,
+      "azure": 61,
+      "mongo": 61,
       "igual": true
     },
     {
       "tabla": "stripe_evento",
       "coleccion": "stripe_eventos",
-      "azure": 2,
-      "mongo": 2,
+      "azure": 8,
+      "mongo": 8,
       "igual": true
     }
   ],
   "versiones": {
-    "azure": 571,
-    "supabase": 571,
-    "mongodb": 571
+    "azure": 1308,
+    "supabase": 1308,
+    "mongodb": 1308
   },
   "diferencias": 0
 }

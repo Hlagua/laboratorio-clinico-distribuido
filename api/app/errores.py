@@ -37,6 +37,8 @@ _HTTP_POR_CODIGO = {
     50090: 422, 50091: 422, 50092: 422, 50093: 404, 50094: 409, 50095: 403, 50096: 422,
     # consultas y ventanilla (09_consultas.sql)
     50100: 422, 50101: 503, 50102: 422, 50103: 403, 50104: 403, 50105: 403, 50106: 409,
+    # laboratorios y reprogramación (12_laboratorios.sql)
+    50110: 404, 50111: 422, 50112: 409, 50113: 409, 50114: 404, 50115: 409, 50116: 422, 50117: 422, 50118: 409,
 }
 _PATRON_CODIGO = re.compile(r"\((5\d{4})\)")
 _PATRON_MENSAJE = re.compile(r"\[SQL Server\](.*?)\s*\(\d+\)\s*\(SQL", re.S)

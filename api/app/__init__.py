@@ -40,8 +40,9 @@ def create_app() -> Flask:
         from flask_cors import CORS
         CORS(app, origins=config.CORS_ORIGENES, expose_headers=["X-Instancia", "X-Origen-Datos"])
 
-    from .servicios import auth, citas, conocimiento, examenes, notificaciones, pagos, recetas, soap, tratamientos, usuarios
-    for modulo in (auth, citas, examenes, pagos, tratamientos, notificaciones, usuarios, conocimiento, recetas, soap):
+    from .servicios import (auth, citas, conocimiento, examenes, laboratorios, notificaciones, pagos, recetas, soap,
+                            tratamientos, usuarios)
+    for modulo in (auth, citas, examenes, pagos, tratamientos, notificaciones, usuarios, conocimiento, recetas, laboratorios, soap):
         app.register_blueprint(modulo.bp)
 
     @app.before_request

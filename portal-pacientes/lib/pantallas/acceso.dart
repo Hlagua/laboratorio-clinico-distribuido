@@ -24,6 +24,35 @@ class _AccesoState extends State<Acceso> {
     for (final k in ['cedula', 'nombres', 'apellidos', 'telefono', 'email', 'password', 'confirmar']) k: TextEditingController(),
   };
   bool _verClave = false;
+
+  /// Flutter Web pierde la posición del cursor al volver a un campo oculto (contraseña):
+  /// la tecla de borrar no hacía nada. Al recibir el foco se deja el cursor al final.
+  late final Map<String, FocusNode> _foco = {
+    for (final k in ['email', 'password', 'confirmar'])
+      k: FocusNode()
+        ..addListener(() {
+          final f = _foco[k]!;
+          final ctl = _c[k]!;
+          if (!f.hasFocus || ctl.text.isEmpty) return;
+          // Se mueve el cursor al inicio y, en el siguiente cuadro, al final: así Flutter vuelve a
+          // sincronizar el campo del navegador y la tecla de borrar funciona desde el primer intento.
+          ctl.selection = const TextSelection.collapsed(offset: 0);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (f.hasFocus) ctl.selection = TextSelection.collapsed(offset: ctl.text.length);
+          });
+        }),
+  };
+
+  @override
+  void dispose() {
+    for (final f in _foco.values) {
+      f.dispose();
+    }
+    for (final c in _c.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
   bool _verConfirmacion = false;
 
   // Controles de escritura: solo dígitos en cédula y teléfono; solo letras (con tildes) y espacios en los nombres.
@@ -62,8 +91,8 @@ class _AccesoState extends State<Acceso> {
       final roles = (usuario['roles'] as List).cast<String>()
           .where((x) => x == 'PACIENTE' || Sesion.rolesPersonal.contains(x)).toList();
       if (!mounted) return;
-      final rol = await elegirRol(context, roles);
-      if (rol == null) return; // cerró el diálogo sin elegir
+      // Entra con su rol más alto; después puede cambiarlo desde "Cambiar de rol".
+      final rol = ordenRoles.firstWhere(roles.contains, orElse: () => 'PACIENTE');
       if (rol == 'PACIENTE') {
         sesion.iniciar(r['token'] as String, usuario);
         if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/panel', (_) => false);
@@ -76,6 +105,16 @@ class _AccesoState extends State<Acceso> {
       if (mounted) setState(() => _enviando = false);
     }
   }
+
+  /// Botón × que vacía el campo (para corregir de una vez un correo o una clave mal escritos).
+  Widget _borrar(String campo) => IconButton(
+        tooltip: 'Borrar',
+        icon: const Icon(Icons.close, size: 18),
+        onPressed: () {
+          _c[campo]!.clear();
+          _foco[campo]!.requestFocus();
+        },
+      );
 
   String? _requerido(String? v) => (v == null || v.trim().isEmpty) ? 'Obligatorio' : null;
 
@@ -121,7 +160,7 @@ class _AccesoState extends State<Acceso> {
                     Text(
                       reg
                           ? 'Las cuentas de médicos, laboratoristas y administradores las crea el administrador del laboratorio.'
-                          : 'Un solo acceso para pacientes y personal del laboratorio. Si tiene varios roles, elegirá con cuál entrar.',
+                          : 'Un solo acceso para pacientes y personal del laboratorio. Entra con su rol principal y luego puede cambiarlo.',
                       style: const TextStyle(color: Colors.grey, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
@@ -197,11 +236,12 @@ class _AccesoState extends State<Acceso> {
                     ],
                     TextFormField(
                       controller: _c['email'],
-                      decoration: const InputDecoration(labelText: 'Correo electrónico'),
+                      decoration: InputDecoration(labelText: 'Correo electrónico', suffixIcon: _borrar('email')),
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: const [AutofillHints.email],
-                      inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s')), LengthLimitingTextInputFormatter(150)],
-                      validator: (v) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v ?? '') ? null : 'Correo no válido',
+                      focusNode: _foco['email'],
+                      inputFormatters: [soloCaracteresCorreo, LengthLimitingTextInputFormatter(150)],
+                      validator: (v) => correoValido.hasMatch((v ?? '').trim()) ? null : 'Correo no válido',
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -209,14 +249,18 @@ class _AccesoState extends State<Acceso> {
                       decoration: InputDecoration(
                         labelText: 'Contraseña',
                         helperText: reg ? 'Mínimo 8 caracteres con letras y números' : null,
-                        suffixIcon: IconButton(
-                          tooltip: _verClave ? 'Ocultar contraseña' : 'Ver contraseña',
-                          icon: Icon(_verClave ? Icons.visibility_off : Icons.visibility),
-                          onPressed: () => setState(() => _verClave = !_verClave),
-                        ),
+                        suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                          _borrar('password'),
+                          IconButton(
+                            tooltip: _verClave ? 'Ocultar contraseña' : 'Ver contraseña',
+                            icon: Icon(_verClave ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () => setState(() => _verClave = !_verClave),
+                          ),
+                        ]),
                       ),
                       obscureText: !_verClave,
-                      inputFormatters: [LengthLimitingTextInputFormatter(72)],
+                      focusNode: _foco['password'],
+                      inputFormatters: [sinEmojis, LengthLimitingTextInputFormatter(72)],
                       autofillHints: [reg ? AutofillHints.newPassword : AutofillHints.password],
                       validator: (v) => reg ? _clave(v) : _requerido(v),
                       onFieldSubmitted: (_) => reg ? null : _enviar(),
@@ -234,7 +278,8 @@ class _AccesoState extends State<Acceso> {
                           ),
                         ),
                         obscureText: !_verConfirmacion,
-                        inputFormatters: [LengthLimitingTextInputFormatter(72)],
+                        focusNode: _foco['confirmar'],
+                        inputFormatters: [sinEmojis, LengthLimitingTextInputFormatter(72)],
                         autofillHints: const [AutofillHints.newPassword],
                         validator: (v) => v == _c['password']!.text ? null : 'Las contraseñas no coinciden',
                         onFieldSubmitted: (_) => _enviar(),

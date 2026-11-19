@@ -1,4 +1,5 @@
 """Servicio de citas: franjas disponibles, reservas, cancelaciones y agenda."""
+import json
 from datetime import date, datetime, time, timedelta
 
 from flask import Blueprint, g, jsonify, request
@@ -20,6 +21,7 @@ bp = Blueprint("citas", __name__, url_prefix="/api/citas")
 # agenda el médico está incluida en la consulta: queda confirmada y sin cobro
 # (10_control_gratis.sql). HORAS_ANTES_CONTROL queda por compatibilidad.
 MINUTOS_PARA_PAGAR = 30
+DIAS_REPROGRAMAR = 30          # se puede mover la cita hasta 30 días hacia adelante
 HORAS_ANTES_CONTROL = 2
 
 SQL_CITAS = """
@@ -263,3 +265,132 @@ def crear_franjas():
                           AND (f.medico_id = ? OR (f.medico_id IS NULL AND ? IS NULL)))
     """, desde, desde, hasta, intervalo, h_ini, intervalo, h_ini, h_fin, intervalo, capacidad, medico_id, medico_id, medico_id)
     return jsonify(franjas_creadas=creadas), 201
+
+
+# ------------------------------ horario de cada médico ------------------------------
+def _hora(valor, campo: str) -> time:
+    try:
+        return time.fromisoformat(str(valor))
+    except ValueError:
+        raise ApiError(f"'{campo}' debe tener formato HH:MM.", 422, "TIPO_INVALIDO")
+
+
+@bp.post("/horario")
+@requiere("MEDICO", "ADMIN")
+def generar_horario():
+    """El médico arma su agenda: días de la semana y bloques con su propia duración de consulta.
+
+    {desde, hasta, dias: [1..7] (1 = lunes), bloques: [{inicio: "08:00", fin: "12:00", minutos: 30}, ...]}
+    Ej.: mañana de 08:00 a 12:00 cada 30 min y tarde de 14:00 a 18:00 cada 60 min, de lunes a viernes.
+    No pisa turnos que ya existan: los horarios que se cruzan con otros se omiten.
+    """
+    d = cuerpo()
+    medico_id = perfil("medico_id") if rol_actual() == "MEDICO" else entero(d, "medico_id")
+    try:
+        desde, hasta = date.fromisoformat(d["desde"]), date.fromisoformat(d["hasta"])
+    except (KeyError, ValueError, TypeError):
+        raise ApiError("Envíe 'desde' y 'hasta' (AAAA-MM-DD).", 422, "TIPO_INVALIDO")
+    if desde < date.today() or hasta < desde or (hasta - desde).days > 62:
+        raise ApiError("El rango debe empezar hoy o después y durar máximo 62 días.", 422, "RANGO_INVALIDO")
+    dias = d.get("dias")
+    if not isinstance(dias, list) or not dias or not all(isinstance(x, int) and 1 <= x <= 7 for x in dias):
+        raise ApiError("Elija al menos un día de la semana (1 = lunes ... 7 = domingo).", 422, "TIPO_INVALIDO")
+    bloques = d.get("bloques")
+    if not isinstance(bloques, list) or not 1 <= len(bloques) <= 6:
+        raise ApiError("Envíe entre 1 y 6 bloques de horario.", 422, "TIPO_INVALIDO")
+    rangos = []
+    for b in bloques:
+        if not isinstance(b, dict):
+            raise ApiError("Cada bloque debe tener inicio, fin y minutos.", 422, "TIPO_INVALIDO")
+        ini, fin = _hora(b.get("inicio"), "inicio"), _hora(b.get("fin"), "fin")
+        minutos = b.get("minutos")
+        if not isinstance(minutos, int) or not 10 <= minutos <= 240:
+            raise ApiError("La duración de la consulta debe estar entre 10 y 240 minutos.", 422, "TIPO_INVALIDO")
+        if fin <= ini:
+            raise ApiError("En cada bloque la hora de fin debe ser posterior a la de inicio.", 422, "TIPO_INVALIDO")
+        rangos.append((ini, fin, minutos))
+    rangos.sort()
+    for (a_ini, a_fin, _), (b_ini, _, _) in zip(rangos, rangos[1:]):
+        if b_ini < a_fin:
+            raise ApiError("Los bloques de horario no pueden cruzarse entre sí.", 422, "BLOQUES_CRUZADOS")
+
+    turnos = []
+    dia = desde
+    while dia <= hasta:
+        if dia.isoweekday() in dias:
+            for ini, fin, minutos in rangos:
+                t = datetime.combine(dia, ini)
+                limite = datetime.combine(dia, fin)
+                while t + timedelta(minutes=minutos) <= limite:
+                    turnos.append({"fecha": dia.isoformat(), "inicio": t.strftime("%H:%M"),
+                                   "fin": (t + timedelta(minutes=minutos)).strftime("%H:%M")})
+                    t += timedelta(minutes=minutos)
+        dia += timedelta(days=1)
+    if not turnos:
+        return jsonify(franjas_creadas=0, omitidas=0, mensaje="Con esos días y horas no se generó ningún turno."), 201
+    # Una sola sentencia: se insertan los turnos que no se cruzan con otros del mismo médico.
+    creadas = db.ejecutar("""
+        INSERT INTO dbo.franja_horaria (fecha, hora_inicio, hora_fin, capacidad, medico_id)
+        SELECT j.fecha, j.inicio, j.fin, 1, ?
+        FROM OPENJSON(?) WITH (fecha DATE, inicio TIME(0), fin TIME(0)) j
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.franja_horaria f
+                          WHERE f.medico_id = ? AND f.fecha = j.fecha
+                            AND (f.hora_inicio = j.inicio OR (f.activa = 1 AND f.hora_inicio < j.fin AND f.hora_fin > j.inicio)))""",
+                          medico_id, json.dumps(turnos), medico_id)
+    db.ejecutar_sp("sp_auditar", usuario_id=usuario_actual()["usuario_id"], rol_actuante=rol_actual(),
+                   accion="GENERAR_HORARIO", entidad="medico", entidad_id=str(medico_id),
+                   detalle=json.dumps({"desde": d["desde"], "hasta": d["hasta"], "creadas": creadas}))
+    return jsonify(franjas_creadas=creadas, omitidas=len(turnos) - creadas), 201
+
+
+@bp.get("/horario")
+@requiere("MEDICO", "ADMIN")
+def ver_horario():
+    """Turnos del médico (libres y ocupados) desde ?desde por ?dias (máx. 62)."""
+    medico_id = perfil("medico_id") if rol_actual() == "MEDICO" else request.args.get("medico_id", type=int)
+    if not medico_id:
+        raise ApiError("Indique medico_id.", 422, "CAMPO_REQUERIDO")
+    desde = _fecha_param("desde", date.today())
+    dias = min(max(request.args.get("dias", 14, type=int), 1), 62)
+    return jsonify(db.leer(
+        "SELECT franja_id, fecha, hora_inicio, hora_fin, capacidad, ocupados FROM {e}.franja_horaria "
+        "WHERE medico_id = ? AND activa = ? AND fecha BETWEEN ? AND ? ORDER BY fecha, hora_inicio",
+        medico_id, True, desde, desde + timedelta(days=dias)))
+
+
+@bp.delete("/franjas/<int:franja_id>")
+@requiere("MEDICO", "ADMIN")
+def quitar_franja(franja_id: int):
+    """Quita un turno libre de la agenda (el médico no atenderá a esa hora)."""
+    filtro, params = ("", []) if rol_actual() == "ADMIN" else (" AND medico_id = ?", [perfil("medico_id")])
+    if not db.ejecutar("UPDATE dbo.franja_horaria SET activa = 0, updated_at = SYSUTCDATETIME() "
+                       f"WHERE franja_id = ? AND ocupados = 0{filtro}", franja_id, *params):
+        raise ApiError("El turno no existe, no es suyo o ya tiene una cita.", 409, "FRANJA_OCUPADA")
+    return jsonify(franja_id=franja_id, activa=False)
+
+
+# ------------------------------ reprogramar ------------------------------
+@bp.post("/<int:cita_id>/reprogramar")
+@requiere("PACIENTE", "ADMIN")
+def reprogramar(cita_id: int):
+    """Mueve la cita a otro horario libre del mismo tipo (y médico), dentro de los próximos DIAS_REPROGRAMAR días.
+    Conserva el pago: una cita confirmada sigue confirmada."""
+    cita = db.leer_uno("SELECT paciente_id FROM {e}.cita WHERE cita_id = ?", cita_id, contingencia=False)
+    if not cita:
+        raise no_encontrado("La cita")
+    if rol_actual() == "PACIENTE" and cita["paciente_id"] != perfil("paciente_id"):
+        raise prohibido("Solo puede reprogramar sus propias citas.")
+    franja_id = entero(cuerpo(), "franja_id")
+    franja = db.leer_uno("SELECT fecha FROM {e}.franja_horaria WHERE franja_id = ?", franja_id, contingencia=False)
+    if not franja:
+        raise no_encontrado("La franja")
+    fecha = franja["fecha"] if isinstance(franja["fecha"], date) else date.fromisoformat(str(franja["fecha"]))
+    if fecha > date.today() + timedelta(days=DIAS_REPROGRAMAR):
+        raise ApiError(f"Solo se puede reprogramar dentro de los próximos {DIAS_REPROGRAMAR} días.", 422, "FUERA_DE_PLAZO")
+    db.ejecutar_sp("sp_reprogramar_cita", cita_id=cita_id, franja_id=franja_id, usuario_id=usuario_actual()["usuario_id"])
+    c = _con_vencimiento([db.leer_uno(SQL_CITAS + " WHERE c.cita_id = ?", cita_id)])[0]
+    persona = db.leer_uno("SELECT persona_id FROM {e}.paciente WHERE paciente_id = ?", c["paciente_id"])
+    encolar(persona["persona_id"], "CITA_REPROGRAMADA", f"Cita reprogramada para el {c['fecha']} a las {str(c['hora_inicio'])[:5]}",
+            f"Su cita quedó para el {c['fecha']} a las {str(c['hora_inicio'])[:5]}"
+            + (f" con Dr(a). {c['medico']}." if c["medico"] else " en el laboratorio."))
+    return jsonify(c)

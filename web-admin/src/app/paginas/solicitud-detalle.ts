@@ -4,7 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
 import { claseEstado, dinero, fechaHora, rango, textoEstado } from '../core/formato';
-import { ExamenSolicitado, Parametro, Solicitud, TipoExamen } from '../core/modelos';
+import { DocumentoExterno, ExamenSolicitado, Parametro, Solicitud, TipoExamen } from '../core/modelos';
 import { RecetaPanel } from './receta';
 import { Sugerencias } from './sugerencias';
 
@@ -37,7 +37,32 @@ interface Captura { parametro: Parametro; valor: string }
           }
         </div>
       </div>
-      @if (s.estado === 'REGISTRADA') {
+      @if (s.laboratorio_propio === false) {
+        <div class="card externo">
+          <h2>Exámenes en {{ s.laboratorio }}</h2>
+          <p class="muted">Laboratorio externo: se pagan allá y el resultado se sube en PDF. El sistema lee los valores;
+            el laboratorista los revisa y los registra, y desde ahí el médico los ve como cualquier resultado.</p>
+          <div class="fila">
+            <label class="boton-archivo secundario">Subir resultado (PDF)
+              <input type="file" accept="application/pdf" (change)="subirPdf($event)" hidden /></label>
+            @if (subiendo()) { <small class="muted">Subiendo y leyendo el PDF…</small> }
+          </div>
+          @for (d of documentos(); track d.documento_id) {
+            <div class="doc">
+              <button type="button" class="secundario chico" (click)="verPdf(d)">Ver {{ d.nombre_archivo }}</button>
+              <small class="muted">{{ fechaHora(d.fecha) }} · {{ d.valores_leidos.length }} valores leídos</small>
+              @if (d.valores_leidos.length) {
+                <table class="leidos">
+                  @for (v of d.valores_leidos; track v.parametro_id) { <tr><td>{{ v.parametro }}</td><td><strong>{{ v.valor ?? v.texto }}</strong></td></tr> }
+                </table>
+                @if (auth.tiene('LABORATORISTA') && puedeProcesar()) {
+                  <button type="button" class="chico" (click)="usarValores(d)">Llenar los resultados con estos valores</button>
+                }
+              } @else if (!d.texto_leido) { <small class="muted"> · el PDF no tiene texto (escaneado): transcriba los valores.</small> }
+            </div>
+          } @empty { <p class="muted">Todavía no se ha subido el resultado.</p> }
+        </div>
+      } @else if (s.estado === 'REGISTRADA') {
         <div class="alerta aviso">La solicitud aún no está pagada: no se pueden registrar muestras ni resultados.</div>
         @if (auth.tiene('LABORATORISTA', 'ADMIN')) {
           <div class="card cobro-ventanilla">
@@ -117,7 +142,7 @@ interface Captura { parametro: Parametro; valor: string }
               </form>
             }
           } @else if (auth.tiene('LABORATORISTA') && puedeProcesar()) {
-            @if (ex.estado === 'PENDIENTE') {
+            @if (ex.estado === 'PENDIENTE' && s.laboratorio_propio !== false) {
               <p class="muted">Primero registre la toma de muestra.</p>
               <button class="secundario" (click)="muestra(ex)">Registrar toma de muestra</button>
             } @else if (capturas[ex.detalle_id]) {
@@ -164,6 +189,10 @@ interface Captura { parametro: Parametro; valor: string }
     h1 .badge { vertical-align: middle; margin-left: 8px; }
     .obs { background: var(--azul-suave); border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
     .cobro { margin: -12px 0 16px; color: var(--gris); }
+    .externo { border-left: 4px solid var(--ambar); border-radius: 0; }
+    .boton-archivo { display: inline-block; padding: 8px 14px; border: 1px solid var(--verde); border-radius: 6px; cursor: pointer; color: var(--verde); }
+    .doc { border-top: 1px solid var(--borde); padding: 8px 0; }
+    .leidos td { padding: 2px 10px 2px 0; }
     .cobro-ventanilla .check { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
     .qr { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
     .qr img { border: 1px solid var(--borde); border-radius: 6px; background: #fff; }
@@ -238,6 +267,7 @@ export class SolicitudDetalle implements OnInit, OnDestroy {
       ]);
       this.catalogo = catalogo;
       await this.cargar(solicitud);
+      await this.cargarDocumentos();
       // Datos de facturación propuestos: los del paciente (se pueden cambiar).
       this.fact = { identificacion: solicitud.cedula, nombre: solicitud.paciente, direccion: '', email: '' };
       const pago = this.ruta.snapshot.queryParamMap.get('pago');
@@ -260,9 +290,67 @@ export class SolicitudDetalle implements OnInit, OnDestroy {
   }
 
   protected puedeProcesar(): boolean {
-    // El cobro de una consulta médica no lleva muestras ni resultados.
-    return this.s()?.tipo !== 'CONSULTA' && ['PAGADA', 'EN_PROCESO'].includes(this.s()?.estado ?? '');
+    // El cobro de una consulta médica no lleva muestras ni resultados. Un laboratorio externo no se paga aquí.
+    const s = this.s();
+    if (!s || s.tipo === 'CONSULTA') return false;
+    return ['PAGADA', 'EN_PROCESO'].includes(s.estado) || (s.laboratorio_propio === false && s.estado === 'REGISTRADA');
   }
+
+  protected readonly documentos = signal<DocumentoExterno[]>([]);
+  protected readonly subiendo = signal(false);
+
+  private async cargarDocumentos() {
+    if (this.s()?.laboratorio_propio !== false) return;
+    try {
+      this.documentos.set(await this.api.get<DocumentoExterno[]>(`/api/solicitudes/${this.id()}/resultado-externo`));
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    }
+  }
+
+  async subirPdf(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const archivo = input.files?.[0];
+    input.value = '';
+    if (!archivo) return;
+    if (archivo.size > 5 * 1024 * 1024) {
+      this.error.set('El PDF no puede pasar de 5 MB.');
+      return;
+    }
+    this.subiendo.set(true);
+    this.error.set('');
+    try {
+      const datos = new Uint8Array(await archivo.arrayBuffer());
+      let binario = '';
+      for (let i = 0; i < datos.length; i += 0x8000) binario += String.fromCharCode(...datos.subarray(i, i + 0x8000));
+      const r = await this.api.post<{ valores: unknown[] }>(`/api/solicitudes/${this.id()}/resultado-externo`,
+        { nombre: archivo.name.slice(0, 150), contenido_base64: btoa(binario) });
+      this.aviso.set(r.valores.length ? `PDF subido: se leyeron ${r.valores.length} valores.` : 'PDF subido; no se pudieron leer valores.');
+      await this.cargarDocumentos();
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    } finally {
+      this.subiendo.set(false);
+    }
+  }
+
+  async verPdf(d: DocumentoExterno) {
+    try {
+      await this.api.abrirArchivo(`/api/solicitudes/${this.id()}/resultado-externo/${d.documento_id}`);
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    }
+  }
+
+  /** Lleva los valores leídos del PDF a los formularios de captura; el laboratorista revisa y guarda. */
+  usarValores(d: DocumentoExterno) {
+    for (const v of d.valores_leidos) {
+      const c = this.capturas[v.detalle_id]?.find((x) => x.parametro.parametro_id === v.parametro_id);
+      if (c) c.valor = String(v.valor ?? v.texto ?? '');
+    }
+    this.aviso.set('Valores cargados en los formularios: revíselos y guarde cada resultado.');
+  }
+
 
   protected cantidadResultados(): number {
     return this.s()?.examenes.filter((e) => e.resultado_id).length ?? 0;

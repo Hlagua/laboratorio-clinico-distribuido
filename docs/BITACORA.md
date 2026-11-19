@@ -101,6 +101,11 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D49 | **Tratamientos y recetas solo para el médico y el paciente** | Son datos clínicos. El laboratorio y la administración ven los datos del paciente y sus exámenes, no sus tratamientos ni recetas (403 en la API). La factura la ve el laboratorio solo si cobró en ventanilla. | Dejar que el personal vea todo |
 | D50 | **El sistema del personal no se traba tras un despliegue** | Una pestaña abierta pedía archivos de la versión anterior; Nginx devolvía index.html en su lugar y la navegación fallaba sin aviso. Ahora un archivo inexistente da 404, `index.html` va sin caché y, si una sección no carga, la página se recarga sola en esa dirección. | Pedir al usuario que recargue |
 | D51 | **Receta simple y unida al tratamiento** (`11_receta_simple.sql`) | El médico escribe cada medicamento en una línea (izquierda) y cómo tomarlo en las indicaciones (derecha); la dosis, la frecuencia y los días dejan de ser campos aparte. Guardar la receta registra (o actualiza) el tratamiento del paciente y le envía la receta por correo con el PDF; en el portal la ve desde "Tratamientos". | Campos separados de dosis, frecuencia y días (repetían lo que va en las indicaciones) |
+| D52 | **Se entra con el rol más alto** (administrador > médico > laboratorista > paciente), sin preguntar | Pedido del equipo: el diálogo al ingresar estorbaba. El cambio de rol sigue disponible después ("Cambiar de rol"). | Preguntar el rol en cada ingreso |
+| D53 | **Sin emojis en ningún campo y correo con caracteres simples** | Se quitan al escribir (portal y sistema del personal) y la API los rechaza (422) en cualquier texto, así no entran por otra vía. El correo solo admite letras sin tilde, números y . _ % + - (antes un emoji al final se aceptaba). | Validar solo en el navegador |
+| D54 | **Cada médico arma su horario**: días de la semana y bloques con su propia duración (p. ej. mañana cada 30 min, tarde cada 60) | La agenda se genera desde "Mi horario" (o el administrador por cualquier médico); no se pisan turnos existentes y se pueden quitar los libres. El paciente puede **reagendar** su cita a otro horario libre del mismo tipo y médico, hasta 30 días, sin perder el pago. | Duración fija para todos |
+| D55 | **Centro de notificaciones** en los dos portales con los mismos avisos que se envían por correo | El usuario ve sus avisos (pagos, resultados, recetas, citas) aunque no revise el correo; los "nuevos" se marcan en el navegador, sin columna nueva en la base. | Solo correo |
+| D56 | **Varios laboratorios** (el administrador los crea) y **resultado externo en PDF guardado en MongoDB** | Supabase es réplica de solo lectura; MongoDB es la parte documental, por eso ahí van los PDF. El paciente o el médico eligen otro laboratorio (no se cobra aquí); se sube el PDF, el sistema lee los valores (`pypdf`) y el laboratorista los registra; el médico los ve como cualquier resultado. | Guardar el PDF en Azure SQL (se replicaría a Supabase sin necesidad) |
 
 ## 5. Registro cronológico
 
@@ -422,6 +427,22 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 - API: la dosis y la frecuencia son opcionales; guardar la receta crea o actualiza el tratamiento (uno por solicitud y médico) y encola el correo `RECETA` con el PDF adjunto.
 - Portal: "Tratamientos" tiene el botón "Ver receta y exámenes".
 - Pruebas: receta simple 6/6 (tratamiento creado y actualizado sin duplicar, PDF, correo ENVIADO con el adjunto), receta 11/11 y consulta 25/25.
+
+### 2026-11-19 — Revisión del equipo: login, horarios, reagendar, notificaciones y laboratorios (D52–D56)
+- **Login:** entra con el rol más alto; los campos de correo y contraseña tienen un botón × para borrar lo escrito y el cursor se reubica al volver al campo (en Flutter Web la tecla de borrar a veces no respondía en el campo de contraseña).
+- **Emojis:** se quitan al escribir en el portal y en el sistema del personal; la API rechaza cualquier texto con emojis y valida el correo con un patrón estricto.
+- **Horario del médico:** `POST/GET /api/citas/horario`, `DELETE /api/citas/franjas/<id>`; pantalla "Mi horario" (médico) y "Horarios de médicos" (administrador).
+- **Reagendar:** `POST /api/citas/<id>/reprogramar` (`sp_reprogramar_cita`); en el portal, botón de calendario en cada cita: elige el día (hasta 30 días) y ve los horarios libres.
+- **Notificaciones:** `GET /api/notificaciones/mias`; campana en el portal y "Avisos" en el sistema del personal.
+- **Laboratorios:** `12_laboratorios.sql` (tabla `laboratorio`, `solicitud_examen.laboratorio_id`, `sp_cambiar_laboratorio`, `sp_registrar_resultado` admite resultados de un laboratorio externo sin pago); `06_laboratorios.sql` en Supabase; el sincronizador replica la tabla nueva. API en `servicios/laboratorios.py`. Nginx acepta peticiones de hasta 8 MB (PDF de 5 MB en base64).
+- **Pruebas** (`pruebas/flujo_revision_1911.py`): 17/17. Cubre:
+  - emojis rechazados;
+  - horario con bloques de 30 y 60 min, sin duplicar y con bloques cruzados rechazados;
+  - quitar turno, reagendar (y 403 de otro paciente), consulta a turno de laboratorio rechazada (422);
+  - notificaciones;
+  - laboratorio externo: PDF subido, valor leído (glucosa 142), guardado en MongoDB, registrado por el laboratorista y visto por el médico con ↑ alto.
+- Regresión: consulta 25/25, receta 11/11, cita 6/6, factura 10/10; réplica CONSISTENTE en 32 tablas (versión 1308).
+- Para las pruebas se generaron turnos de laboratorio de los próximos 30 días.
 
 ## 6. Pendientes
 

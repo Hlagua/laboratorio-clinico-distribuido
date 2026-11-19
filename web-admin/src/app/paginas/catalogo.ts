@@ -2,7 +2,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, mensajeError } from '../core/api';
 import { dinero, hoyIso, rango } from '../core/formato';
-import { MedicoAgenda, TipoExamen } from '../core/modelos';
+import { Laboratorio, MedicoAgenda, TipoExamen } from '../core/modelos';
 import { paginarLocal, Paginador } from '../core/paginador';
 
 interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | null; valor_ref_max: number | null; valor_ref_texto: string }
@@ -66,6 +66,26 @@ interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | n
         </div>
       </form>
 
+      <div class="card">
+        <h2>Laboratorios</h2>
+        <p class="muted">El paciente o el médico pueden elegir que los exámenes se hagan en otro laboratorio; ahí se pagan,
+          y el resultado se sube en PDF.</p>
+        <table>
+          @for (l of laboratorios(); track l.laboratorio_id) {
+            <tr><td><strong>{{ l.nombre }}</strong> @if (l.propio) { <span class="badge">propio</span> }
+              <br /><small class="muted">{{ l.direccion }} {{ l.telefono }}</small></td>
+              <td>@if (!l.propio) { <button class="secundario chico" (click)="activarLab(l)">{{ l.activo ? 'Desactivar' : 'Activar' }}</button> }
+                @else { <small class="muted">siempre activo</small> }</td></tr>
+          }
+        </table>
+        <form class="fila" (ngSubmit)="crearLab()">
+          <div class="campo"><label for="ln">Nombre</label><input id="ln" name="ln" maxlength="150" [(ngModel)]="lab.nombre" required /></div>
+          <div class="campo"><label for="ld">Dirección</label><input id="ld" name="ld" maxlength="250" [(ngModel)]="lab.direccion" /></div>
+          <div class="campo"><label for="lt">Teléfono</label><input id="lt" name="lt" maxlength="10" inputmode="numeric" [(ngModel)]="lab.telefono" /></div>
+          <div class="campo"><button type="submit" [disabled]="!lab.nombre.trim()">Agregar laboratorio</button></div>
+        </form>
+      </div>
+
       <form class="card" (ngSubmit)="generarFranjas()">
         <h2>Generar franjas de atención</h2>
         <p class="muted">Lunes a sábado. Las franjas que ya existen no se duplican.</p>
@@ -108,6 +128,30 @@ export class Catalogo implements OnInit {
   protected fr = { desde: hoyIso(), hasta: hoyIso(), hora_inicio: '07:00', hora_fin: '11:00', intervalo_minutos: 30, capacidad: 3,
     medico_id: null as number | null };
   protected readonly medicos = signal<MedicoAgenda[]>([]);
+  protected readonly laboratorios = signal<Laboratorio[]>([]);
+  protected lab = { nombre: '', direccion: '', telefono: '' };
+
+  async crearLab() {
+    this.error.set('');
+    try {
+      await this.api.post('/api/laboratorios', { nombre: this.lab.nombre, direccion: this.lab.direccion || null,
+        telefono: this.lab.telefono || null });
+      this.aviso.set(`Laboratorio ${this.lab.nombre} agregado.`);
+      this.lab = { nombre: '', direccion: '', telefono: '' };
+      this.laboratorios.set(await this.api.get<Laboratorio[]>('/api/laboratorios', { todos: 1 }));
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    }
+  }
+
+  async activarLab(l: Laboratorio) {
+    try {
+      await this.api.patch(`/api/laboratorios/${l.laboratorio_id}`, { activo: !l.activo });
+      this.laboratorios.set(await this.api.get<Laboratorio[]>('/api/laboratorios', { todos: 1 }));
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    }
+  }
 
   ngOnInit() {
     this.cargar();
@@ -124,6 +168,7 @@ export class Catalogo implements OnInit {
 
   async cargar() {
     try {
+      this.laboratorios.set(await this.api.get<Laboratorio[]>('/api/laboratorios', { todos: 1 }));
       this.medicos.set(await this.api.get<MedicoAgenda[]>('/api/citas/medicos'));
       const c = await this.api.get<TipoExamen[]>('/api/examenes/catalogo');
       this.catalogo.set(c);

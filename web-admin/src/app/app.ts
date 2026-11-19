@@ -1,13 +1,16 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, HostListener, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { EstadoSistema } from './core/api';
 import { AuthService, NOMBRE_ROL, Rol } from './core/auth';
+import { Campana } from './core/campana';
 
 interface Enlace { ruta: string; texto: string; roles: Rol[] }
 
 const MENU: Enlace[] = [
   { ruta: '/inicio', texto: 'Inicio', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
   { ruta: '/agenda', texto: 'Agenda del día', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
+  { ruta: '/horario', texto: 'Mi horario', roles: ['MEDICO'] },
+  { ruta: '/horario', texto: 'Horarios de médicos', roles: ['ADMIN'] },
   { ruta: '/solicitudes', texto: 'Solicitudes y resultados', roles: ['LABORATORISTA', 'MEDICO', 'ADMIN'] },
   { ruta: '/nueva-solicitud', texto: 'Nueva solicitud', roles: ['LABORATORISTA', 'MEDICO'] },
   { ruta: '/pacientes', texto: 'Pacientes y tratamientos', roles: ['MEDICO'] },
@@ -15,7 +18,7 @@ const MENU: Enlace[] = [
   { ruta: '/pacientes', texto: 'Pacientes', roles: ['ADMIN', 'LABORATORISTA'] },
   { ruta: '/pagos', texto: 'Pagos y reembolsos', roles: ['ADMIN'] },
   { ruta: '/usuarios', texto: 'Usuarios y roles', roles: ['ADMIN'] },
-  { ruta: '/catalogo', texto: 'Catálogo y franjas', roles: ['ADMIN'] },
+  { ruta: '/catalogo', texto: 'Catálogo, franjas y laboratorios', roles: ['ADMIN'] },
   { ruta: '/conocimiento', texto: 'Base de conocimientos', roles: ['MEDICO', 'ADMIN'] },
   { ruta: '/reportes', texto: 'Reportes', roles: ['ADMIN', 'MEDICO'] },
   { ruta: '/auditoria', texto: 'Auditoría y correos', roles: ['ADMIN'] },
@@ -23,7 +26,7 @@ const MENU: Enlace[] = [
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, Campana],
   template: `
     @if (auth.autenticado()) {
       <div class="marco" [class]="'marco rol-' + auth.rolActivo()">
@@ -50,6 +53,7 @@ const MENU: Enlace[] = [
               <small class="muted">{{ auth.usuario()?.email }}</small>
             </div>
             <div class="acciones">
+              <app-campana />
               <span class="badge-rol">{{ nombreRol[auth.rolActivo()!] }}</span>
               @if (auth.rolesDisponibles().length > 1) {
                 <button class="secundario chico" (click)="eligiendo.set(true)">⇄ Cambiar de rol</button>
@@ -128,6 +132,18 @@ export class App {
     PACIENTE: 'pacientes', LABORATORISTA: 'laboratorio', MEDICO: 'médicos', ADMIN: 'administración',
   };
   protected readonly eligiendo = signal(false);
+
+  /** No se aceptan emojis en ningún campo del sistema: se quitan mientras se escribe. */
+  @HostListener('document:input', ['$event'])
+  protected sinEmojis(e: Event) {
+    const el = e.target as HTMLInputElement | HTMLTextAreaElement | null;
+    if (!el || !('value' in el) || (el as HTMLInputElement).type === 'file') return;
+    const limpio = el.value.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu, '');
+    if (limpio !== el.value) {
+      el.value = limpio;
+      el.dispatchEvent(new Event('input'));
+    }
+  }
 
   protected cambiar(r: Rol) {
     this.eligiendo.set(false);

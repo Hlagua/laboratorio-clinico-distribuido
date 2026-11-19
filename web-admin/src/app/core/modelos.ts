@@ -79,6 +79,31 @@ export interface SolicitudResumen {
   medico: string | null;
   examenes_resumen?: string | null;
   tipo?: 'EXAMENES' | 'CONSULTA';
+  laboratorio_id?: number | null;
+  laboratorio?: string | null;
+  /** false = laboratorio externo (no se cobra aquí; el resultado llega en PDF). */
+  laboratorio_propio?: boolean | null;
+}
+
+export interface Laboratorio {
+  laboratorio_id: number;
+  nombre: string;
+  direccion: string | null;
+  telefono: string | null;
+  email: string | null;
+  propio: boolean;
+  activo: boolean;
+}
+
+export interface ValorLeido { detalle_id: number; parametro_id: number; parametro: string; valor?: number; texto?: string }
+
+export interface DocumentoExterno {
+  documento_id: string;
+  nombre_archivo: string;
+  fecha: string;
+  laboratorio: string;
+  valores_leidos: ValorLeido[];
+  texto_leido: boolean;
 }
 
 export interface ValorResultado {
