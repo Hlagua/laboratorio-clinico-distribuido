@@ -107,6 +107,7 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 | D55 | **Centro de notificaciones** en los dos portales con los mismos avisos que se envían por correo | El usuario ve sus avisos (pagos, resultados, recetas, citas) aunque no revise el correo; los "nuevos" se marcan en el navegador, sin columna nueva en la base. | Solo correo |
 | D56 | **Varios laboratorios** (el administrador los crea) y **resultado externo en PDF guardado en MongoDB** | Supabase es réplica de solo lectura; MongoDB es la parte documental, por eso ahí van los PDF. El paciente o el médico eligen otro laboratorio (no se cobra aquí); se sube el PDF, el sistema lee los valores (`pypdf`) y el laboratorista los registra; el médico los ve como cualquier resultado. | Guardar el PDF en Azure SQL (se replicaría a Supabase sin necesidad) |
 | D57 | **Login con fotos**: galería a la izquierda (escritorio) o franja arriba (celular), formulario a la derecha | Pedido del equipo, a la manera de los portales de salud. Tres fotos de uso libre de Unsplash (tubos, médico con paciente, microscopio), optimizadas (~150 KB c/u), que rotan cada 6 s con un mensaje cada una. Nginx revalida los archivos del portal en cada carga (`Cache-Control: no-cache`): Flutter no versiona el nombre de sus archivos y el navegador mostraba íconos viejos. | Imágenes de otra marca (derechos) o ilustraciones dibujadas |
+| D58 | **Página de inicio con fotos**: carrusel a todo lo ancho, servicios con foto, cómo funciona en 4 pasos, catálogo con buscador y filtro por área, datos de atención y pie | La portada era solo texto y una lista de tarjetas. Se reutilizan las tres fotos de Unsplash del login (sin peso extra de descarga). El catálogo se puede filtrar sin llamar otra vez a la API. En el celular la barra superior deja solo "Ingresar" (crear cuenta queda en "Reservar una cita"). | Plantilla con más fotos (más peso) o una portada estática fuera de Flutter |
 
 ## 5. Registro cronológico
 
@@ -449,6 +450,10 @@ Memoria viva del proyecto: qué se hizo, qué falta, qué se cambió (en el cód
 - `portal-pacientes/lib/pantallas/galeria.dart` y `assets/img/` (licencia Unsplash, con crédito "Fotos: Unsplash" en la galería).
 - Revisado en el navegador en escritorio (1280 px) y celular (375 px); en el registro, el selector de sexo tiene ancho fijo para que la fecha de nacimiento no quede apretada.
 - Nginx: `Cache-Control: no-cache` en el portal (revalidación con 304; no se vuelve a descargar lo que no cambió).
+
+### 2026-11-19 — Página de inicio con fotos (D58)
+- `portal-pacientes/lib/pantallas/inicio.dart` rehecho: carrusel (cambia cada 6 s, flechas y puntos), servicios, pasos, catálogo con buscador y chips por área, horario/ubicación y pie con crédito de fotos.
+- Revisado en el navegador en escritorio y celular (375 px); desplegado solo en la VM1 (la VM2 estaba apagada) y verificado en el dominio público. Al terminar se apagaron las VM.
 
 ## 6. Pendientes
 
