@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'api.dart';
@@ -25,6 +26,10 @@ class PortalPacientes extends StatelessWidget {
     return MaterialApp(
       title: 'Laboratorio Clínico · Portal de pacientes',
       debugShowCheckedModeBanner: false,
+      // Calendarios y textos de los controles en español.
+      locale: const Locale('es'),
+      supportedLocales: const [Locale('es')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: verde, primary: verde),
         scaffoldBackgroundColor: const Color(0xFFF4F7F6),
@@ -59,7 +64,7 @@ class AvisoContingencia extends StatelessWidget {
                 color: const Color(0xFFFFF4D6),
                 padding: const EdgeInsets.all(10),
                 child: const Text(
-                  '⚠ Estamos en modo de contingencia: puede consultar sus resultados, '
+                  'Estamos en modo de contingencia: puede consultar sus resultados, '
                   'pero las reservas y los pagos están deshabilitados temporalmente.',
                   style: TextStyle(color: ambar, fontWeight: FontWeight.w600),
                 ),

@@ -4,7 +4,7 @@ import { Nacimiento, nacimientoValido, SoloLetras, SoloNumeros } from '../core/e
 import { Api, mensajeError } from '../core/api';
 import { AuthService, NOMBRE_ROL, Rol } from '../core/auth';
 import { fechaHora } from '../core/formato';
-import { UsuarioAdmin } from '../core/modelos';
+import { Laboratorio, UsuarioAdmin } from '../core/modelos';
 import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
 
 @Component({
@@ -34,7 +34,13 @@ import { Pagina, paginaVacia, Paginador, POR_PAGINA } from '../core/paginador';
             <tr>
               <td><strong>{{ u.nombre }}</strong><br /><small class="muted">{{ u.email }}</small></td>
               <td>{{ u.cedula }}</td>
-              <td>@for (r of (u.roles ?? '').split(','); track r) { @if (r) { <span class="badge azul">{{ nombre(r) }}</span> } }</td>
+              <td>@for (r of (u.roles ?? '').split(','); track r) { @if (r) { <span class="badge azul">{{ nombre(r) }}</span> } }
+                @if (u.laboratorista_id) {
+                  <div class="sucursal"><small class="muted">Sucursal:</small>
+                    <select [ngModel]="u.sucursal_id" (ngModelChange)="asignarSucursal(u, $event)" [attr.aria-label]="'Sucursal de ' + u.nombre">
+                      @for (s of sucursales(); track s.laboratorio_id) { <option [ngValue]="s.laboratorio_id">{{ s.nombre }}</option> }
+                    </select></div>
+                }</td>
               <td>{{ fechaHora(u.ultimo_login) }}</td>
               <td>
                 <span [class]="u.activo ? 'badge' : 'badge rojo'">{{ u.activo ? 'activo' : 'inactivo' }}</span>
@@ -104,6 +110,7 @@ export class Usuarios implements OnInit {
   protected readonly fechaHora = fechaHora;
   protected readonly roles: Rol[] = ['PACIENTE', 'LABORATORISTA', 'MEDICO', 'ADMIN'];
   protected readonly usuarios = signal<Pagina<UsuarioAdmin>>(paginaVacia());
+  protected readonly sucursales = signal<Laboratorio[]>([]);
   protected f = { q: '', rol: '', activo: '' };
   protected readonly error = signal('');
   protected readonly aviso = signal('');
@@ -112,7 +119,20 @@ export class Usuarios implements OnInit {
   protected area: Record<number, string> = {};
   protected n = this.vacio();
 
+  /** El laboratorista trabaja en una sucursal: ahí ve su agenda del día y registra a quien llega. */
+  async asignarSucursal(u: UsuarioAdmin, laboratorioId: number) {
+    this.error.set('');
+    try {
+      await this.api.put(`/api/usuarios/${u.usuario_id}/sucursal`, { laboratorio_id: laboratorioId });
+      this.aviso.set(`${u.nombre} ahora trabaja en ${this.sucursales().find((s) => s.laboratorio_id === laboratorioId)?.nombre}.`);
+      await this.cargar(this.usuarios().pagina);
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    }
+  }
+
   ngOnInit() {
+    this.api.get<Laboratorio[]>('/api/laboratorios').then((l) => this.sucursales.set(l.filter((x) => x.propio))).catch(() => undefined);
     this.cargar(1);
   }
 

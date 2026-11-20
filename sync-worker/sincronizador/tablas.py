@@ -10,6 +10,7 @@ TABLAS_SUPABASE = [
     "categoria_examen", "tipo_examen", "parametro_examen",
     "franja_horaria", "cita",
     "laboratorio",          # 12_laboratorios.sql (antes de solicitud_examen, que la referencia)
+    "descuento",            # 13_revision_2011.sql (antes de solicitud_detalle, que la referencia)
     "solicitud_examen", "solicitud_detalle", "resultado", "resultado_valor",
     "observacion_medica", "tratamiento",
     "pago", "reembolso",
@@ -17,6 +18,8 @@ TABLAS_SUPABASE = [
     "diagnostico", "protocolo", "regla_diagnostica", "regla_condicion", "sugerencia_diagnostica",
     # Medicamentos y recetas (08_recetas.sql)
     "medicamento", "diagnostico_medicamento", "receta", "receta_item",
+    # Nota de la consulta (13_revision_2011.sql)
+    "consulta_nota",
 ]
 
 # Tablas copiadas 1:1 a MongoDB (tabla -> colección).

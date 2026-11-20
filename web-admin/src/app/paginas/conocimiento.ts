@@ -1,5 +1,6 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink, RouterLinkActive } from '@angular/router';
 import { Api, mensajeError } from '../core/api';
 import { AuthService } from '../core/auth';
 import { Diagnostico, Medicamento, Regla, TipoExamen } from '../core/modelos';
@@ -11,7 +12,7 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
 
 @Component({
   selector: 'app-conocimiento',
-  imports: [FormsModule, Paginador],
+  imports: [FormsModule, Paginador, RouterLink, RouterLinkActive],
   template: `
     <h1>Base de conocimientos</h1>
     <p class="sub">Reglas que relacionan resultados de laboratorio con diagnósticos CIE-10. El motor las evalúa al registrar
@@ -19,6 +20,13 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
     @if (error()) { <div class="alerta error">{{ error() }}</div> }
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
 
+    <nav class="pestanas" aria-label="Secciones de la base de conocimientos">
+      <a routerLink="/conocimiento/reglas" routerLinkActive="activa">Reglas diagnósticas</a>
+      <a routerLink="/conocimiento/diagnosticos" routerLinkActive="activa">Diagnósticos y protocolos</a>
+      <a routerLink="/conocimiento/medicamentos" routerLinkActive="activa">Medicamentos</a>
+    </nav>
+
+    @if (seccion() === 'reglas') {
     <div class="card tabla-scroll">
       <h2>Reglas diagnósticas</h2>
       <div class="buscador"><input type="search" placeholder="Buscar por código, diagnóstico o CIE-10" [ngModel]="qr()" (ngModelChange)="qr.set($event); pr.set(1)" /></div>
@@ -34,7 +42,7 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
               <td><span [class]="'badge ' + (r.confianza === 'ALTA' ? 'rojo' : r.confianza === 'MEDIA' ? 'ambar' : 'gris')">{{ r.confianza.toLowerCase() }}</span></td>
               <td class="num">
                 @if (r.precision_pct !== null) { <strong>{{ r.precision_pct }} %</strong> } @else { — }
-                <br /><small class="muted">{{ r.aceptadas }} ✓ / {{ r.descartadas }} ✗ de {{ r.sugerencias }}</small>
+                <br /><small class="muted">{{ r.aceptadas }} aceptadas / {{ r.descartadas }} descartadas de {{ r.sugerencias }}</small>
               </td>
               <td>
                 <span [class]="r.activa ? 'badge' : 'badge gris'">{{ r.activa ? 'activa' : 'inactiva' }}</span>
@@ -48,64 +56,7 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
       </table>
       <app-paginador [pagina]="vistaReglas()" (cambiar)="pr.set($event)" />
     </div>
-
-    <div class="card tabla-scroll">
-      <h2>Diagnósticos y protocolos</h2>
-      <div class="buscador"><input type="search" placeholder="Buscar por CIE-10, diagnóstico o protocolo" [ngModel]="qd()" (ngModelChange)="qd.set($event); pd.set(1)" /></div>
-      <table>
-        <thead><tr><th>CIE-10</th><th>Diagnóstico</th><th>Protocolo sugerido</th></tr></thead>
-        <tbody>
-          @for (d of vistaDiag().items; track d.diagnostico_id) {
-            <tr><td><strong>{{ d.codigo_cie10 }}</strong></td><td>{{ d.nombre }}<br /><small class="muted">{{ d.descripcion }}</small></td>
-              <td>{{ d.protocolo }} @if (d.duracion_dias) { <small class="muted">({{ d.duracion_dias }} días)</small> }</td></tr>
-          } @empty { <tr><td colspan="3" class="vacio">Ningún diagnóstico coincide.</td></tr> }
-        </tbody>
-      </table>
-      <app-paginador [pagina]="vistaDiag()" (cambiar)="pd.set($event)" />
-    </div>
-
-    <div class="card tabla-scroll">
-      <h2>Medicamentos (vademécum)</h2>
-      <p class="muted">Al recetar, el sistema propone los medicamentos de los diagnósticos sugeridos y completa su dosis e
-        indicaciones al escribir el nombre. El médico puede cambiarlo todo.</p>
-      <div class="buscador"><input type="search" placeholder="Buscar medicamento o diagnóstico CIE-10" [ngModel]="qm()"
-        (ngModelChange)="qm.set($event); pm.set(1)" /></div>
-      <table>
-        <thead><tr><th>Medicamento</th><th>Dosis y frecuencia</th><th>Indicaciones</th><th>Para</th></tr></thead>
-        <tbody>
-          @for (m of vistaMed().items; track m.medicamento_id) {
-            <tr><td><strong>{{ m.nombre }}</strong><br /><small class="muted">{{ m.presentacion }} · vía {{ m.via.toLowerCase() }}</small></td>
-              <td>{{ m.dosis }} {{ m.frecuencia }}{{ m.duracion_dias ? ' · ' + m.duracion_dias + ' días' : '' }}</td>
-              <td>{{ m.indicaciones }} @if (m.advertencias) { <br /><small class="advertencia">⚠ {{ m.advertencias }}</small> }</td>
-              <td>{{ m.diagnosticos }}</td></tr>
-          } @empty { <tr><td colspan="4" class="vacio">Ningún medicamento coincide.</td></tr> }
-        </tbody>
-      </table>
-      <app-paginador [pagina]="vistaMed()" (cambiar)="pm.set($event)" />
-    </div>
-
-    @if (auth.tiene('ADMIN')) {
-      <form class="card" (ngSubmit)="guardarMedicamento()">
-        <h2>Agregar o actualizar un medicamento</h2>
-        <div class="fila">
-          <div class="campo"><label>Nombre genérico</label><input name="mn" maxlength="120" [(ngModel)]="med.nombre" required /></div>
-          <div class="campo"><label>Presentación</label><input name="mp" maxlength="120" [(ngModel)]="med.presentacion" placeholder="Tableta 500 mg" required /></div>
-          <div class="campo"><label>Vía</label><input name="mv" maxlength="30" [(ngModel)]="med.via" /></div>
-        </div>
-        <div class="fila">
-          <div class="campo"><label>Dosis</label><input name="md" maxlength="60" [(ngModel)]="med.dosis" placeholder="1 tableta (500 mg)" required /></div>
-          <div class="campo"><label>Frecuencia</label><input name="mf" maxlength="60" [(ngModel)]="med.frecuencia" placeholder="cada 12 horas" required /></div>
-          <div class="campo"><label>Duración (días)</label><input name="mdu" type="number" min="1" [(ngModel)]="med.duracion_dias" /></div>
-        </div>
-        <div class="campo"><label>Indicaciones (cómo tomarlo)</label><textarea name="mi" maxlength="1000" [(ngModel)]="med.indicaciones" required></textarea></div>
-        <div class="campo"><label>Advertencias</label><input name="ma" maxlength="500" [(ngModel)]="med.advertencias" /></div>
-        <div class="campo"><label>Se sugiere para (diagnósticos)</label>
-          <select name="mdx" multiple size="5" [(ngModel)]="med.diagnosticos">
-            @for (d of diagnosticos(); track d.diagnostico_id) { <option [ngValue]="d.diagnostico_id">{{ d.codigo_cie10 }} · {{ d.nombre }}</option> }
-          </select><small class="muted">Ctrl + clic para elegir varios. Si el nombre y la presentación ya existen, se actualiza.</small></div>
-        <button type="submit" [disabled]="!med.nombre || !med.presentacion || !med.dosis || !med.frecuencia || !med.indicaciones">Guardar medicamento</button>
-      </form>
-
+    @if (auth.tiene('ADMIN')) { 
       <form class="card" (ngSubmit)="guardar()">
         <h2>Nueva regla (o reemplazar una existente con el mismo código)</h2>
         <div class="fila">
@@ -145,11 +96,80 @@ const SIMBOLO: Record<string, string> = { '<': '<', '<=': '≤', '>': '>', '>=':
         </div>
         <button type="submit">Guardar regla</button>
       </form>
+     }
+    }
+
+    @if (seccion() === 'diagnosticos') {
+    <div class="card tabla-scroll">
+      <h2>Diagnósticos y protocolos</h2>
+      <div class="buscador"><input type="search" placeholder="Buscar por CIE-10, diagnóstico o protocolo" [ngModel]="qd()" (ngModelChange)="qd.set($event); pd.set(1)" /></div>
+      <table>
+        <thead><tr><th>CIE-10</th><th>Diagnóstico</th><th>Protocolo sugerido</th></tr></thead>
+        <tbody>
+          @for (d of vistaDiag().items; track d.diagnostico_id) {
+            <tr><td><strong>{{ d.codigo_cie10 }}</strong></td><td>{{ d.nombre }}<br /><small class="muted">{{ d.descripcion }}</small></td>
+              <td>{{ d.protocolo }} @if (d.duracion_dias) { <small class="muted">({{ d.duracion_dias }} días)</small> }</td></tr>
+          } @empty { <tr><td colspan="3" class="vacio">Ningún diagnóstico coincide.</td></tr> }
+        </tbody>
+      </table>
+      <app-paginador [pagina]="vistaDiag()" (cambiar)="pd.set($event)" />
+    </div>
+    }
+
+    @if (seccion() === 'medicamentos') {
+    <div class="card tabla-scroll">
+      <h2>Medicamentos (vademécum)</h2>
+      <p class="muted">Al recetar, el sistema propone los medicamentos de los diagnósticos sugeridos y completa su dosis e
+        indicaciones al escribir el nombre. El médico puede cambiarlo todo.</p>
+      <div class="buscador"><input type="search" placeholder="Buscar medicamento o diagnóstico CIE-10" [ngModel]="qm()"
+        (ngModelChange)="qm.set($event); pm.set(1)" /></div>
+      <table>
+        <thead><tr><th>Medicamento</th><th>Dosis y frecuencia</th><th>Indicaciones</th><th>Para</th></tr></thead>
+        <tbody>
+          @for (m of vistaMed().items; track m.medicamento_id) {
+            <tr><td><strong>{{ m.nombre }}</strong><br /><small class="muted">{{ m.presentacion }} · vía {{ m.via.toLowerCase() }}</small></td>
+              <td>{{ m.dosis }} {{ m.frecuencia }}{{ m.duracion_dias ? ' · ' + m.duracion_dias + ' días' : '' }}</td>
+              <td>{{ m.indicaciones }} @if (m.advertencias) { <br /><small class="advertencia">Advertencia: {{ m.advertencias }}</small> }</td>
+              <td>{{ m.diagnosticos }}</td></tr>
+          } @empty { <tr><td colspan="4" class="vacio">Ningún medicamento coincide.</td></tr> }
+        </tbody>
+      </table>
+      <app-paginador [pagina]="vistaMed()" (cambiar)="pm.set($event)" />
+    </div>
+
+    @if (auth.tiene('ADMIN')) {
+      <form class="card" (ngSubmit)="guardarMedicamento()">
+        <h2>Agregar o actualizar un medicamento</h2>
+        <div class="fila">
+          <div class="campo"><label>Nombre genérico</label><input name="mn" maxlength="120" [(ngModel)]="med.nombre" required /></div>
+          <div class="campo"><label>Presentación</label><input name="mp" maxlength="120" [(ngModel)]="med.presentacion" placeholder="Tableta 500 mg" required /></div>
+          <div class="campo"><label>Vía</label><input name="mv" maxlength="30" [(ngModel)]="med.via" /></div>
+        </div>
+        <div class="fila">
+          <div class="campo"><label>Dosis</label><input name="md" maxlength="60" [(ngModel)]="med.dosis" placeholder="1 tableta (500 mg)" required /></div>
+          <div class="campo"><label>Frecuencia</label><input name="mf" maxlength="60" [(ngModel)]="med.frecuencia" placeholder="cada 12 horas" required /></div>
+          <div class="campo"><label>Duración (días)</label><input name="mdu" type="number" min="1" [(ngModel)]="med.duracion_dias" /></div>
+        </div>
+        <div class="campo"><label>Indicaciones (cómo tomarlo)</label><textarea name="mi" maxlength="1000" [(ngModel)]="med.indicaciones" required></textarea></div>
+        <div class="campo"><label>Advertencias</label><input name="ma" maxlength="500" [(ngModel)]="med.advertencias" /></div>
+        <div class="campo"><label>Se sugiere para (diagnósticos)</label>
+          <select name="mdx" multiple size="5" [(ngModel)]="med.diagnosticos">
+            @for (d of diagnosticos(); track d.diagnostico_id) { <option [ngValue]="d.diagnostico_id">{{ d.codigo_cie10 }} · {{ d.nombre }}</option> }
+          </select><small class="muted">Ctrl + clic para elegir varios. Si el nombre y la presentación ya existen, se actualiza.</small></div>
+        <button type="submit" [disabled]="!med.nombre || !med.presentacion || !med.dosis || !med.frecuencia || !med.indicaciones">Guardar medicamento</button>
+      </form>
+
+    }
     }
   `,
-  styles: `.advertencia { color: var(--ambar); } select[multiple] { width: 100%; } tr.inactiva td { opacity: .55; } .mini select, .mini input { flex: 1 1 110px; } h3 { margin-top: 12px; }`,
+  styles: `.pestanas { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid var(--borde); margin-bottom: 16px; }
+    .pestanas a { padding: 8px 14px; text-decoration: none; color: var(--gris); border-radius: 6px 6px 0 0; font-weight: 600; }
+    .pestanas a.activa { background: var(--verde); color: #fff; }
+    .advertencia { color: var(--ambar); } select[multiple] { width: 100%; } tr.inactiva td { opacity: .55; } .mini select, .mini input { flex: 1 1 110px; } h3 { margin-top: 12px; }`,
 })
 export class Conocimiento implements OnInit {
+  /** Sección a la vista (de la ruta /conocimiento/:seccion). */
+  readonly seccion = input<string>('reglas');
   private readonly api = inject(Api);
   protected readonly auth = inject(AuthService);
   protected readonly reglas = signal<Regla[]>([]);

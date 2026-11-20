@@ -10,7 +10,7 @@
 import base64
 import re
 import unicodedata
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from io import BytesIO
 
 from bson import ObjectId
@@ -37,31 +37,62 @@ def _documentos():
     return _mongo[config.MONGO_DB].resultados_externos
 
 
-# ------------------------------ laboratorios ------------------------------
+# ------------------------------ laboratorios y sucursales ------------------------------
+SQL_LABS = ("SELECT laboratorio_id, nombre, direccion, telefono, email, propio, activo, latitud, longitud "
+            "FROM {e}.laboratorio")
+
+
+def _coordenada(d: dict, campo: str, minimo: float, maximo: float):
+    v = d.get(campo)
+    if v in (None, ""):
+        return None
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        raise ApiError(f"'{campo}' debe ser un número.", 422, "TIPO_INVALIDO")
+    if not minimo <= v <= maximo:
+        raise ApiError(f"'{campo}' debe estar entre {minimo} y {maximo}.", 422, "TIPO_INVALIDO")
+    return round(v, 6)
+
+
 @bp.get("/laboratorios")
 def laboratorios():
-    """Público: laboratorios activos (el propio primero)."""
-    todos = request.args.get("todos") == "1"
-    sql = "SELECT laboratorio_id, nombre, direccion, telefono, email, propio, activo FROM {e}.laboratorio"
-    if todos:
-        return jsonify(db.leer(sql + " ORDER BY propio DESC, nombre"))
-    return jsonify(db.leer(sql + " WHERE activo = ? ORDER BY propio DESC, nombre", True))
+    """Público: laboratorios activos. Los propios son las sucursales de la empresa (van primero)."""
+    if request.args.get("todos") == "1":
+        return jsonify(db.leer(SQL_LABS + " ORDER BY propio DESC, nombre"))
+    return jsonify(db.leer(SQL_LABS + " WHERE activo = ? ORDER BY propio DESC, nombre", True))
 
 
 @bp.post("/laboratorios")
 @requiere("ADMIN")
 def crear_laboratorio():
+    """Crea una sucursal de la empresa (propio = true) o un laboratorio externo."""
     d = cuerpo()
     try:
-        db.ejecutar("INSERT INTO dbo.laboratorio (nombre, direccion, telefono, email) VALUES (?, ?, ?, ?)",
-                    texto(d, "nombre", maximo=150), texto(d, "direccion", False, 250), telefono(d), correo(d, requerido=False))
+        db.ejecutar("INSERT INTO dbo.laboratorio (nombre, direccion, telefono, email, propio, latitud, longitud) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    texto(d, "nombre", maximo=150), texto(d, "direccion", False, 250), telefono(d), correo(d, requerido=False),
+                    bool(d.get("propio")), _coordenada(d, "latitud", -90, 90), _coordenada(d, "longitud", -180, 180))
     except ApiError as e:
         if e.codigo == "DUPLICADO":
             raise ApiError("Ya existe un laboratorio con ese nombre.", 409, "DUPLICADO")
         raise
     db.ejecutar_sp("sp_auditar", usuario_id=usuario_actual()["usuario_id"], rol_actuante="ADMIN",
                    accion="CREAR_LABORATORIO", entidad="laboratorio", entidad_id=d.get("nombre"))
-    return jsonify(db.leer_uno("SELECT * FROM {e}.laboratorio WHERE nombre = ?", d["nombre"].strip())), 201
+    return jsonify(db.leer_uno(SQL_LABS + " WHERE nombre = ?", d["nombre"].strip())), 201
+
+
+@bp.put("/laboratorios/<int:laboratorio_id>")
+@requiere("ADMIN")
+def editar_laboratorio(laboratorio_id: int):
+    """Dirección, teléfono y ubicación (para el mapa de 'Cómo llegar')."""
+    d = cuerpo()
+    if not db.ejecutar("UPDATE dbo.laboratorio SET direccion = ?, telefono = ?, latitud = ?, longitud = ?, "
+                       "updated_at = SYSUTCDATETIME() WHERE laboratorio_id = ?",
+                       texto(d, "direccion", False, 250), telefono(d), _coordenada(d, "latitud", -90, 90),
+                       _coordenada(d, "longitud", -180, 180), laboratorio_id):
+        raise no_encontrado("El laboratorio")
+    return jsonify(db.leer_uno(SQL_LABS + " WHERE laboratorio_id = ?", laboratorio_id))
 
 
 @bp.patch("/laboratorios/<int:laboratorio_id>")
@@ -70,10 +101,72 @@ def activar_laboratorio(laboratorio_id: int):
     activo = cuerpo().get("activo")
     if not isinstance(activo, bool):
         raise ApiError("Envíe 'activo': true | false.", 422, "TIPO_INVALIDO")
+    # Siempre debe quedar al menos una sucursal activa.
     if not db.ejecutar("UPDATE dbo.laboratorio SET activo = ?, updated_at = SYSUTCDATETIME() "
-                       "WHERE laboratorio_id = ? AND propio = 0", activo, laboratorio_id):
-        raise ApiError("El laboratorio no existe o es el propio (no se desactiva).", 409, "OPERACION_INVALIDA")
+                       "WHERE laboratorio_id = ? AND (? = 1 OR propio = 0 OR "
+                       "(SELECT COUNT(*) FROM dbo.laboratorio WHERE propio = 1 AND activo = 1) > 1)",
+                       activo, laboratorio_id, activo):
+        raise ApiError("El laboratorio no existe o es la única sucursal activa.", 409, "OPERACION_INVALIDA")
     return jsonify(laboratorio_id=laboratorio_id, activo=activo)
+
+
+# ------------------------------ descuentos ------------------------------
+SQL_DESCUENTOS = """
+SELECT d.descuento_id, d.nombre, d.porcentaje, d.laboratorio_id, l.nombre AS sucursal, d.tipo_examen_id,
+       t.nombre AS examen, d.desde, d.hasta, d.activo
+FROM {e}.descuento d
+LEFT JOIN {e}.laboratorio l ON l.laboratorio_id = d.laboratorio_id
+LEFT JOIN {e}.tipo_examen t ON t.tipo_examen_id = d.tipo_examen_id
+"""
+
+
+@bp.get("/descuentos")
+def descuentos():
+    """Público: descuentos vigentes (para mostrarlos en el portal). ?todos=1 incluye los vencidos e inactivos."""
+    if request.args.get("todos") == "1":
+        return jsonify(db.leer(SQL_DESCUENTOS + " ORDER BY d.activo DESC, d.desde DESC"))
+    return jsonify(db.leer(SQL_DESCUENTOS + " WHERE d.activo = ? AND ? BETWEEN d.desde AND d.hasta "
+                           "ORDER BY d.porcentaje DESC", True, date.today()))
+
+
+@bp.post("/descuentos")
+@requiere("ADMIN")
+def crear_descuento():
+    """{nombre, porcentaje (1-90), desde, hasta, laboratorio_id? (sin él: todas), tipo_examen_id? (sin él: todos)}"""
+    d = cuerpo()
+    try:
+        porcentaje = float(d.get("porcentaje"))
+    except (TypeError, ValueError):
+        raise ApiError("'porcentaje' debe ser un número.", 422, "TIPO_INVALIDO")
+    if not 1 <= porcentaje <= 90:
+        raise ApiError("El descuento debe estar entre 1 % y 90 %.", 422, "TIPO_INVALIDO")
+    try:
+        desde, hasta = date.fromisoformat(d["desde"]), date.fromisoformat(d["hasta"])
+    except (KeyError, ValueError, TypeError):
+        raise ApiError("Envíe 'desde' y 'hasta' (AAAA-MM-DD).", 422, "TIPO_INVALIDO")
+    if hasta < desde:
+        raise ApiError("La fecha final no puede ser anterior a la inicial.", 422, "RANGO_INVALIDO")
+    laboratorio_id = entero(d, "laboratorio_id", False)
+    if laboratorio_id and not db.leer_uno("SELECT 1 AS x FROM {e}.laboratorio WHERE laboratorio_id = ? AND propio = ?",
+                                          laboratorio_id, True, contingencia=False):
+        raise ApiError("Los descuentos son para las sucursales de la empresa.", 422, "SUCURSAL_INVALIDA")
+    nuevo = db.ejecutar_sp("sp_crear_descuento", "descuento_id", nombre=texto(d, "nombre", maximo=120),
+                           porcentaje=round(porcentaje, 2), laboratorio_id=laboratorio_id,
+                           tipo_examen_id=entero(d, "tipo_examen_id", False), desde=desde, hasta=hasta,
+                           usuario_id=usuario_actual()["usuario_id"])
+    return jsonify(db.leer_uno(SQL_DESCUENTOS + " WHERE d.descuento_id = ?", nuevo)), 201
+
+
+@bp.patch("/descuentos/<int:descuento_id>")
+@requiere("ADMIN")
+def activar_descuento(descuento_id: int):
+    activo = cuerpo().get("activo")
+    if not isinstance(activo, bool):
+        raise ApiError("Envíe 'activo': true | false.", 422, "TIPO_INVALIDO")
+    if not db.ejecutar("UPDATE dbo.descuento SET activo = ?, updated_at = SYSUTCDATETIME() WHERE descuento_id = ?",
+                       activo, descuento_id):
+        raise no_encontrado("El descuento")
+    return jsonify(descuento_id=descuento_id, activo=activo)
 
 
 # ------------------------------ solicitud en otro laboratorio ------------------------------
@@ -97,6 +190,7 @@ def cambiar_laboratorio(solicitud_id: int):
     _solicitud(solicitud_id)
     db.ejecutar_sp("sp_cambiar_laboratorio", solicitud_id=solicitud_id, laboratorio_id=entero(cuerpo(), "laboratorio_id"),
                    usuario_id=usuario_actual()["usuario_id"])
+    db.ejecutar_sp("sp_aplicar_descuentos", solicitud_id=solicitud_id)
     return jsonify(_solicitud(solicitud_id))
 
 

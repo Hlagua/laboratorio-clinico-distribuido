@@ -15,8 +15,12 @@ bp = Blueprint("examenes", __name__, url_prefix="/api")
 log = logging.getLogger("api")
 
 SQL_SOLICITUDES = """
-SELECT s.solicitud_id, s.codigo, s.estado, s.total, s.observaciones, s.created_at, s.cita_id, s.tipo,
+SELECT s.solicitud_id, s.codigo, s.estado, s.total, s.observaciones, s.created_at, s.cita_id, s.tipo, s.consulta_cita_id,
        s.laboratorio_id, lb.nombre AS laboratorio, lb.propio AS laboratorio_propio,
+       lb.direccion AS laboratorio_direccion, lb.latitud, lb.longitud,
+       ct.estado AS cita_estado, fc.fecha AS cita_fecha, fc.hora_inicio AS cita_hora,
+       (SELECT COUNT(*) FROM {e}.solicitud_detalle sd WHERE sd.solicitud_id = s.solicitud_id
+        AND sd.estado = 'RESULTADO_LISTO') AS examenes_listos,
        pa.paciente_id, p.cedula, CONCAT(p.nombres, ' ', p.apellidos) AS paciente,
        s.medico_id, CONCAT(pm.nombres, ' ', pm.apellidos) AS medico,
        (SELECT STRING_AGG(t.nombre, ', ') FROM {e}.solicitud_detalle sd
@@ -27,6 +31,8 @@ JOIN {e}.persona p ON p.persona_id = pa.persona_id
 LEFT JOIN {e}.medico m ON m.medico_id = s.medico_id
 LEFT JOIN {e}.persona pm ON pm.persona_id = m.persona_id
 LEFT JOIN {e}.laboratorio lb ON lb.laboratorio_id = s.laboratorio_id
+LEFT JOIN {e}.cita ct ON ct.cita_id = s.cita_id
+LEFT JOIN {e}.franja_horaria fc ON fc.franja_id = ct.franja_id
 """
 
 
@@ -70,6 +76,13 @@ def crear_tipo_examen():
 @bp.post("/solicitudes")
 @requiere("PACIENTE", "MEDICO", "LABORATORISTA")
 def crear_solicitud():
+    """Crea la orden de exámenes.
+
+    - El paciente puede elegir en el mismo paso la sucursal, la fecha y la hora de la toma de muestras
+      (?franja_id); o elegir otro laboratorio (laboratorio_id externo: allá se paga y luego sube el PDF).
+    - El médico indica en qué consulta la ordenó (consulta_cita_id).
+    Los descuentos vigentes de la sucursal se aplican al crearla.
+    """
     d = cuerpo()
     rol = rol_actual()
     if rol == "PACIENTE":
@@ -77,26 +90,94 @@ def crear_solicitud():
     else:
         paciente_id = entero(d, "paciente_id")
     medico_id = perfil("medico_id") if rol == "MEDICO" else None
-    solicitud_id = db.ejecutar_sp(
-        "sp_crear_solicitud", "solicitud_id", paciente_id=paciente_id,
-        examenes=json.dumps(lista_enteros(d, "examenes")), medico_id=medico_id,
-        cita_id=entero(d, "cita_id", False), observaciones=texto(d, "observaciones", False),
-        usuario_id=usuario_actual()["usuario_id"])
-    # El médico (o el personal) puede indicar que los exámenes se harán en otro laboratorio.
+    franja_id = entero(d, "franja_id", False)
+    # Con turno: primero se reserva (puede no haber cupo) y luego se crea la solicitud ya vinculada a él;
+    # si la solicitud falla, el turno se libera.
+    cita_id, sucursal = (_reservar_toma(paciente_id, franja_id) if franja_id else (entero(d, "cita_id", False), None))
+    try:
+        solicitud_id = db.ejecutar_sp(
+            "sp_crear_solicitud", "solicitud_id", paciente_id=paciente_id,
+            examenes=json.dumps(lista_enteros(d, "examenes")), medico_id=medico_id,
+            cita_id=cita_id, observaciones=texto(d, "observaciones", False),
+            usuario_id=usuario_actual()["usuario_id"])
+    except ApiError:
+        if franja_id:
+            db.ejecutar_sp("sp_cancelar_cita", cita_id=cita_id, usuario_id=usuario_actual()["usuario_id"])
+        raise
+    if sucursal:
+        db.ejecutar_sp("sp_vincular_turno", solicitud_id=solicitud_id, cita_id=cita_id, laboratorio_id=sucursal,
+                       usuario_id=usuario_actual()["usuario_id"])
+    consulta_cita_id = entero(d, "consulta_cita_id", False) if rol == "MEDICO" else None
+    if consulta_cita_id:
+        db.ejecutar_sp("sp_marcar_consulta_solicitud", solicitud_id=solicitud_id, consulta_cita_id=consulta_cita_id,
+                       medico_id=medico_id)
+    # Otro laboratorio (externo) o una sucursal distinta de la matriz.
     laboratorio_id = entero(d, "laboratorio_id", False)
-    if laboratorio_id:
+    if rol == "LABORATORISTA" and not laboratorio_id:
+        from .citas import sucursal_del_laboratorista
+        laboratorio_id = sucursal_del_laboratorista()     # la registra en su sucursal
+    if laboratorio_id and not franja_id:
         db.ejecutar_sp("sp_cambiar_laboratorio", solicitud_id=solicitud_id, laboratorio_id=laboratorio_id,
                        usuario_id=usuario_actual()["usuario_id"])
+    db.ejecutar_sp("sp_aplicar_descuentos", solicitud_id=solicitud_id)
     s = obtener_solicitud(solicitud_id)
     if rol == "MEDICO":
         # El paciente se entera por correo de los exámenes que le ordenó su médico y de cómo pagarlos.
         from .notificaciones import encolar
         persona = db.leer_uno("SELECT persona_id FROM {e}.paciente WHERE paciente_id = ?", paciente_id)
         encolar(persona["persona_id"], "EXAMENES_ORDENADOS", f"Exámenes ordenados por su médico - {s['codigo']}",
-                f"Dr(a). {s['medico']} le ordenó: {s['examenes_resumen']} (total USD {s['total']:.2f}). Páguelos desde "
-                "'Mis exámenes' en el portal y acuda al laboratorio de lunes a sábado de 07:00 a 11:00. Los resultados "
+                f"Dr(a). {s['medico']} le ordenó: {s['examenes_resumen']} (total USD {s['total']:.2f}). En 'Mis exámenes' "
+                "del portal elija la sucursal, la fecha y la hora para la toma de muestras y páguelos. Los resultados "
                 "le llegarán a usted y a su médico.")
     return jsonify(s), 201
+
+
+def _reservar_toma(paciente_id: int, franja_id: int) -> tuple[int, int]:
+    """Reserva un turno de toma de muestras en una de nuestras sucursales. Devuelve (cita_id, sucursal)."""
+    franja = db.leer_uno("SELECT f.medico_id, f.laboratorio_id FROM {e}.franja_horaria f "
+                         "JOIN {e}.laboratorio l ON l.laboratorio_id = f.laboratorio_id "
+                         "WHERE f.franja_id = ? AND l.propio = ?", franja_id, True, contingencia=False)
+    if not franja or franja["medico_id"] is not None:
+        raise ApiError("Elija un turno de toma de muestras de una de nuestras sucursales.", 422, "FRANJA_INVALIDA")
+    cita_id = db.ejecutar_sp("sp_reservar_cita", "cita_id", paciente_id=paciente_id, franja_id=franja_id,
+                             motivo="Toma de muestras", canal="PORTAL", usuario_id=usuario_actual()["usuario_id"],
+                             instancia_api=config.INSTANCIA)
+    return cita_id, franja["laboratorio_id"]
+
+
+def agendar_toma(solicitud_id: int, paciente_id: int, franja_id: int) -> int:
+    """Reserva el turno de toma de muestras (sucursal, fecha y hora) para una solicitud que ya existe.
+
+    La solicitud pasa a esa sucursal. Si ya estaba pagada, el turno queda confirmado.
+    """
+    s = db.leer_uno("SELECT s.estado, s.tipo, s.cita_id, c.estado AS cita_estado FROM {e}.solicitud_examen s "
+                    "LEFT JOIN {e}.cita c ON c.cita_id = s.cita_id WHERE s.solicitud_id = ?", solicitud_id, contingencia=False)
+    if s["tipo"] != "EXAMENES" or s["estado"] not in ("REGISTRADA", "PAGADA"):
+        raise ApiError("Solo se agenda la toma de muestras de exámenes aún no procesados.", 409, "ESTADO_INVALIDO")
+    if s["cita_id"] and s["cita_estado"] in ("PENDIENTE_PAGO", "CONFIRMADA"):
+        raise ApiError("Esta solicitud ya tiene un turno. Para cambiarlo, reagéndelo desde 'Mis citas'.", 409, "YA_TIENE_TURNO")
+    cita_id, sucursal = _reservar_toma(paciente_id, franja_id)
+    try:
+        if s["estado"] == "REGISTRADA":
+            db.ejecutar_sp("sp_cambiar_laboratorio", solicitud_id=solicitud_id, laboratorio_id=sucursal,
+                           usuario_id=usuario_actual()["usuario_id"])
+        db.ejecutar_sp("sp_vincular_turno", solicitud_id=solicitud_id, cita_id=cita_id, laboratorio_id=sucursal,
+                       usuario_id=usuario_actual()["usuario_id"])
+    except ApiError:
+        db.ejecutar_sp("sp_cancelar_cita", cita_id=cita_id, usuario_id=usuario_actual()["usuario_id"])
+        raise
+    return cita_id
+
+
+@bp.put("/solicitudes/<int:solicitud_id>/turno")
+@requiere("PACIENTE", "LABORATORISTA", "ADMIN")
+def elegir_turno(solicitud_id: int):
+    """El paciente elige sucursal, fecha y hora para unos exámenes ya ordenados (por ejemplo, por su médico)."""
+    s = obtener_solicitud(solicitud_id)
+    _verificar_acceso(s)
+    agendar_toma(solicitud_id, s["paciente_id"], entero(cuerpo(), "franja_id"))
+    db.ejecutar_sp("sp_aplicar_descuentos", solicitud_id=solicitud_id)
+    return jsonify(obtener_solicitud(solicitud_id))
 
 
 @bp.get("/solicitudes/mias")
@@ -156,7 +237,7 @@ def obtener_solicitud(solicitud_id: int, codigo: str | None = None) -> dict:
     if not s:
         raise no_encontrado("La solicitud")
     detalles = db.leer("""
-        SELECT d.detalle_id, d.estado, d.precio_unitario, t.tipo_examen_id, t.codigo, t.nombre AS examen,
+        SELECT d.detalle_id, d.estado, d.precio_unitario, d.precio_lista, t.tipo_examen_id, t.codigo, t.nombre AS examen,
                r.resultado_id, r.fecha_resultado, r.observaciones AS observaciones_laboratorio,
                CONCAT(pl.nombres, ' ', pl.apellidos) AS laboratorista
         FROM {e}.solicitud_detalle d

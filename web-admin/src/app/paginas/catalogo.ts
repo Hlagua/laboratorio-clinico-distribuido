@@ -1,8 +1,8 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, mensajeError } from '../core/api';
-import { dinero, hoyIso, rango } from '../core/formato';
-import { Laboratorio, MedicoAgenda, TipoExamen } from '../core/modelos';
+import { dinero, rango } from '../core/formato';
+import { TipoExamen } from '../core/modelos';
 import { paginarLocal, Paginador } from '../core/paginador';
 
 interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | null; valor_ref_max: number | null; valor_ref_texto: string }
@@ -11,8 +11,8 @@ interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | n
   selector: 'app-catalogo',
   imports: [FormsModule, Paginador],
   template: `
-    <h1>Catálogo y franjas</h1>
-    <p class="sub">Exámenes ofrecidos y horarios de atención.</p>
+    <h1>Exámenes</h1>
+    <p class="sub">Catálogo de exámenes con sus parámetros y valores de referencia.</p>
     @if (error()) { <div class="alerta error">{{ error() }}</div> }
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
 
@@ -66,48 +66,6 @@ interface ParamNuevo { nombre: string; unidad: string; valor_ref_min: number | n
         </div>
       </form>
 
-      <div class="card">
-        <h2>Laboratorios</h2>
-        <p class="muted">El paciente o el médico pueden elegir que los exámenes se hagan en otro laboratorio; ahí se pagan,
-          y el resultado se sube en PDF.</p>
-        <table>
-          @for (l of laboratorios(); track l.laboratorio_id) {
-            <tr><td><strong>{{ l.nombre }}</strong> @if (l.propio) { <span class="badge">propio</span> }
-              <br /><small class="muted">{{ l.direccion }} {{ l.telefono }}</small></td>
-              <td>@if (!l.propio) { <button class="secundario chico" (click)="activarLab(l)">{{ l.activo ? 'Desactivar' : 'Activar' }}</button> }
-                @else { <small class="muted">siempre activo</small> }</td></tr>
-          }
-        </table>
-        <form class="fila" (ngSubmit)="crearLab()">
-          <div class="campo"><label for="ln">Nombre</label><input id="ln" name="ln" maxlength="150" [(ngModel)]="lab.nombre" required /></div>
-          <div class="campo"><label for="ld">Dirección</label><input id="ld" name="ld" maxlength="250" [(ngModel)]="lab.direccion" /></div>
-          <div class="campo"><label for="lt">Teléfono</label><input id="lt" name="lt" maxlength="10" inputmode="numeric" [(ngModel)]="lab.telefono" /></div>
-          <div class="campo"><button type="submit" [disabled]="!lab.nombre.trim()">Agregar laboratorio</button></div>
-        </form>
-      </div>
-
-      <form class="card" (ngSubmit)="generarFranjas()">
-        <h2>Generar franjas de atención</h2>
-        <p class="muted">Lunes a sábado. Las franjas que ya existen no se duplican.</p>
-        <div class="campo"><label for="fm">Agenda de</label>
-          <select id="fm" name="fm" [(ngModel)]="fr.medico_id" (ngModelChange)="fr.capacidad = $event ? 1 : 3">
-            <option [ngValue]="null">Laboratorio (toma de muestras)</option>
-            @for (m of medicos(); track m.medico_id) { <option [ngValue]="m.medico_id">Dr(a). {{ m.nombre }} · {{ m.especialidad }}</option> }
-          </select></div>
-        <div class="fila">
-          <div class="campo"><label>Desde</label><input type="date" name="d" [(ngModel)]="fr.desde" required /></div>
-          <div class="campo"><label>Hasta</label><input type="date" name="h" [(ngModel)]="fr.hasta" required /></div>
-        </div>
-        <div class="fila">
-          <div class="campo"><label>Hora inicio</label><input type="time" name="hi" [(ngModel)]="fr.hora_inicio" /></div>
-          <div class="campo"><label>Hora fin</label><input type="time" name="hf" [(ngModel)]="fr.hora_fin" /></div>
-        </div>
-        <div class="fila">
-          <div class="campo"><label>Minutos por franja</label><input type="number" name="im" [(ngModel)]="fr.intervalo_minutos" /></div>
-          <div class="campo"><label>Pacientes por franja</label><input type="number" name="cp" [(ngModel)]="fr.capacidad" /></div>
-        </div>
-        <button type="submit">Generar</button>
-      </form>
     </div>
   `,
   styles: `.dos { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); } .mini input { width: 100%; flex: 1 1 80px; } h3 { margin-top: 14px; } .badge { margin-left: 6px; }`,
@@ -125,34 +83,6 @@ export class Catalogo implements OnInit {
   protected readonly error = signal('');
   protected readonly aviso = signal('');
   protected ex = this.examenVacio();
-  protected fr = { desde: hoyIso(), hasta: hoyIso(), hora_inicio: '07:00', hora_fin: '11:00', intervalo_minutos: 30, capacidad: 3,
-    medico_id: null as number | null };
-  protected readonly medicos = signal<MedicoAgenda[]>([]);
-  protected readonly laboratorios = signal<Laboratorio[]>([]);
-  protected lab = { nombre: '', direccion: '', telefono: '' };
-
-  async crearLab() {
-    this.error.set('');
-    try {
-      await this.api.post('/api/laboratorios', { nombre: this.lab.nombre, direccion: this.lab.direccion || null,
-        telefono: this.lab.telefono || null });
-      this.aviso.set(`Laboratorio ${this.lab.nombre} agregado.`);
-      this.lab = { nombre: '', direccion: '', telefono: '' };
-      this.laboratorios.set(await this.api.get<Laboratorio[]>('/api/laboratorios', { todos: 1 }));
-    } catch (e) {
-      this.error.set(mensajeError(e));
-    }
-  }
-
-  async activarLab(l: Laboratorio) {
-    try {
-      await this.api.patch(`/api/laboratorios/${l.laboratorio_id}`, { activo: !l.activo });
-      this.laboratorios.set(await this.api.get<Laboratorio[]>('/api/laboratorios', { todos: 1 }));
-    } catch (e) {
-      this.error.set(mensajeError(e));
-    }
-  }
-
   ngOnInit() {
     this.cargar();
   }
@@ -168,8 +98,6 @@ export class Catalogo implements OnInit {
 
   async cargar() {
     try {
-      this.laboratorios.set(await this.api.get<Laboratorio[]>('/api/laboratorios', { todos: 1 }));
-      this.medicos.set(await this.api.get<MedicoAgenda[]>('/api/citas/medicos'));
       const c = await this.api.get<TipoExamen[]>('/api/examenes/catalogo');
       this.catalogo.set(c);
       this.categorias.set([...new Set(c.map((t) => t.categoria))]);
@@ -187,13 +115,6 @@ export class Catalogo implements OnInit {
       await this.api.post('/api/examenes/catalogo', { ...this.ex, parametros });
       this.ex = this.examenVacio();
     }, 'Examen agregado al catálogo.');
-  }
-
-  async generarFranjas() {
-    await this.ejecutar(async () => {
-      const r = await this.api.post<{ franjas_creadas: number }>('/api/citas/franjas', this.fr);
-      this.aviso.set(`${r.franjas_creadas} franjas creadas.`);
-    }, '');
   }
 
   private async ejecutar(fn: () => Promise<unknown>, exito: string) {

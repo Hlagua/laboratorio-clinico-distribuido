@@ -15,9 +15,9 @@ import { paginarLocal, Paginador } from '../core/paginador';
       <div><h1>{{ auth.tiene('MEDICO') ? 'Mis consultas del día' : 'Agenda del día' }}</h1>
         <p class="sub">
           @if (auth.tiene('MEDICO')) {
-            Consultas de su agenda. Atienda al paciente, ordénele los exámenes y agéndele el control.
+            Consultas de su agenda. Atienda al paciente, anote la consulta, recétele u ordénele exámenes y agéndele el control.
           } @else if (auth.tiene('LABORATORISTA')) {
-            Turnos de toma de muestras. La cita queda <strong>atendida</strong> al registrar la toma de muestra.
+            Turnos de toma de muestras de su sucursal. La cita queda <strong>atendida</strong> al registrar la toma de muestra.
           } @else {
             Consultas médicas y turnos de toma de muestras. Una cita queda <strong>confirmada</strong> cuando se paga.
           }
@@ -39,7 +39,7 @@ import { paginarLocal, Paginador } from '../core/paginador';
               <td><strong>{{ hora(c.hora_inicio) }}</strong>–{{ hora(c.hora_fin) }}</td>
               <td>{{ c.paciente }}</td><td>{{ c.cedula }}</td>
               <td>@if (c.tipo === 'CONSULTA') { Consulta{{ c.origen === 'MEDICO' ? ' (control)' : '' }}<br /><small class="muted">{{ c.medico }}</small> }
-                @else { Toma de muestras }</td>
+                @else { Toma de muestras@if (c.sucursal) { <br /><small class="muted">{{ c.sucursal }}</small> } }</td>
               <td>@if (c.solicitud_id) { <strong>{{ c.solicitud_codigo }}</strong><br /><small>{{ c.examenes_resumen }}</small> }
                 @else { <small class="muted">Aún no elige exámenes</small> }</td>
               <td>{{ c.motivo }}</td>

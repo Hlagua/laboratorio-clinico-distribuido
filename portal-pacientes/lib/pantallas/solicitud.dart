@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../comun.dart';
 import '../main.dart';
 import 'extras.dart';
+import 'turnos.dart';
 
 /// Detalle de una solicitud: resultados, PDF y pago.
 class DetalleSolicitud extends StatefulWidget {
@@ -20,9 +21,11 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
   Future<Map<String, dynamic>> _cargar() async => await api.get('/api/solicitudes/${widget.id}') as Map<String, dynamic>;
 
   Future<void> _pagarConTarjeta() async {
+    final titular = await pedirTitular(context);
+    if (titular == null || !mounted) return;
     setState(() => _procesando = true);
     try {
-      final r = await api.post('/api/pagos/checkout', {'solicitud_id': widget.id}) as Map<String, dynamic>;
+      final r = await api.post('/api/pagos/checkout', {'solicitud_id': widget.id, 'titular': titular}) as Map<String, dynamic>;
       api.irA(r['checkout_url'] as String); // página segura de Stripe
     } catch (e) {
       if (mounted) mostrarMensaje(context, '$e', error: true);
@@ -38,6 +41,47 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
     }
   }
 
+  /// Sucursal, fecha y hora para unos exámenes que aún no tienen turno (por ejemplo, los que ordenó el médico).
+  Future<void> _elegirTurno(Map<String, dynamic> s) async {
+    final r = await Navigator.push<Map<String, dynamic>>(
+        context, MaterialPageRoute(builder: (_) => DondeYCuando(conExternos: false, sucursal: s['laboratorio_id'] as int?)));
+    if (r == null || !mounted) return;
+    try {
+      await api.put('/api/solicitudes/${widget.id}/turno', {'franja_id': r['franja_id']});
+      if (mounted) mostrarMensaje(context, 'Turno reservado.');
+      setState(() => _s = _cargar());
+    } catch (e) {
+      if (mounted) mostrarMensaje(context, '$e', error: true);
+    }
+  }
+
+  /// Turno de toma de muestras con "Cómo llegar", o el botón para elegirlo.
+  Widget _turno(Map<String, dynamic> s) {
+    if (s['tipo'] != 'EXAMENES' || s['laboratorio_propio'] == false) return const SizedBox.shrink();
+    final conTurno = s['cita_fecha'] != null && ['PENDIENTE_PAGO', 'CONFIRMADA'].contains(s['cita_estado']);
+    if (conTurno) {
+      return TarjetaSucursal(
+        nombre: s['laboratorio'] as String? ?? 'Laboratorio',
+        direccion: s['laboratorio_direccion'] as String?,
+        lat: s['latitud'],
+        lng: s['longitud'],
+        fecha: s['cita_fecha'] as String?,
+        hora: s['cita_hora'],
+        titulo: s['estado'] == 'REGISTRADA' ? 'Su turno (se confirma al pagar)' : 'Su turno para la toma de muestras',
+      );
+    }
+    if (!['REGISTRADA', 'PAGADA'].contains(s['estado'])) return const SizedBox.shrink();
+    return Card(
+      color: const Color(0xFFE6F2EE),
+      child: ListTile(
+        leading: const Icon(Icons.event_available, color: verde),
+        title: const Text('Elija dónde y cuándo hacerse los exámenes'),
+        subtitle: const Text('Sucursal, fecha y hora para la toma de muestras.'),
+        trailing: FilledButton(onPressed: () => _elegirTurno(s), child: const Text('Elegir')),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,7 +94,7 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
             final examenes = (s['examenes'] as List).cast<Map<String, dynamic>>();
             final consulta = s['tipo'] == 'CONSULTA';
             final conResultados = !consulta && examenes.any((e) => e['resultado_id'] != null);
-            return ListView(padding: const EdgeInsets.all(16), children: [
+            return ListaConSubir(padding: const EdgeInsets.all(16), children: [
               Row(children: [
                 Expanded(child: Text(s['codigo'] as String, style: Theme.of(context).textTheme.headlineSmall)),
                 Etiqueta(s['estado'] as String?),
@@ -60,6 +104,7 @@ class _DetalleSolicitudState extends State<DetalleSolicitud> {
                   : '${fechaHora(s['created_at'])} · Total ${dinero(s['total'])}'
                       '${s['medico_id'] != null ? ' · Ordenado por ${s['medico']}' : ''}'),
               const SizedBox(height: 12),
+              _turno(s),
               // Elegir otro laboratorio (antes de pagar) o, si ya es externo, subir su resultado en PDF.
               OtroLaboratorio(s: s, alCambiar: () => setState(() => _s = _cargar())),
               if (s['estado'] == 'REGISTRADA' && s['laboratorio_propio'] != false)
@@ -216,39 +261,23 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
   String _buscar = '';
   int _pagina = 0;
   static const porPagina = 10;
-  late int? _citaId = widget.citaId;
-  // Citas pendientes de pago que aún no tienen exámenes: se pueden vincular aquí.
-  List<Map<String, dynamic>> _citasLibres = [];
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.citaId == null) _cargarCitas();
-  }
-
-  Future<void> _cargarCitas() async {
-    try {
-      final citas = (await api.get('/api/citas/mias') as List<dynamic>).cast<Map<String, dynamic>>();
-      final libres = citas.where((c) => c['estado'] == 'PENDIENTE_PAGO' && c['solicitud_id'] == null).toList();
-      if (mounted) {
-        setState(() {
-          _citasLibres = libres;
-          if (libres.isNotEmpty) _citaId = libres.first['cita_id'] as int;
-        });
-      }
-    } catch (_) {
-      // Sin citas no pasa nada: la solicitud se crea sin cita.
-    }
-  }
 
   Future<List<dynamic>> _cargar() async => await api.get('/api/examenes/catalogo') as List<dynamic>;
 
   Future<void> _crear() async {
+    // Sin cita previa: primero se elige dónde (sucursal u otro laboratorio) y cuándo (fecha y hora).
+    Map<String, dynamic>? donde;
+    if (widget.citaId == null) {
+      donde = await Navigator.push<Map<String, dynamic>>(
+          context, MaterialPageRoute(builder: (_) => const DondeYCuando(conExternos: true)));
+      if (donde == null || !mounted) return;
+    }
     setState(() => _enviando = true);
     try {
       final s = await api.post('/api/solicitudes', {
         'examenes': _elegidos.toList(),
-        'cita_id': _citaId,
+        if (widget.citaId != null) 'cita_id': widget.citaId,
+        ...?donde,
       }) as Map<String, dynamic>;
       if (mounted) {
         Navigator.pushReplacement(
@@ -284,23 +313,10 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
                   padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: Text('Los exámenes quedarán asociados a su cita. Al pagarlos, la cita queda confirmada.'),
                 )
-              else if (_citasLibres.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DropdownButtonFormField<int?>(
-                    initialValue: _citaId,
-                    decoration: const InputDecoration(
-                        labelText: 'Cita para la toma de muestras',
-                        helperText: 'Al pagar estos exámenes, la cita elegida queda confirmada.'),
-                    items: [
-                      for (final c in _citasLibres)
-                        DropdownMenuItem(
-                            value: c['cita_id'] as int,
-                            child: Text('${fechaLarga(c['fecha'] as String)} · ${hora(c['hora_inicio'])} (pendiente de pago)')),
-                      const DropdownMenuItem(value: null, child: Text('Sin cita (acudiré sin turno)')),
-                    ],
-                    onChanged: (v) => setState(() => _citaId = v),
-                  ),
+              else
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Text('1. Marque sus exámenes. 2. Elija la sucursal, la fecha y la hora (u otro laboratorio). 3. Pague.'),
                 ),
               Expanded(
                 child: ListView(padding: const EdgeInsets.all(12), children: [
@@ -352,7 +368,7 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
                     ),
                     FilledButton(
                       onPressed: _elegidos.isEmpty || _enviando ? null : _crear,
-                      child: Text(_enviando ? 'Creando…' : 'Continuar al pago'),
+                      child: Text(_enviando ? 'Creando…' : widget.citaId == null ? 'Elegir dónde y cuándo' : 'Continuar al pago'),
                     ),
                   ]),
                 ),
@@ -407,7 +423,13 @@ class ResumenPedido extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('RESUMEN DEL PEDIDO', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: .5)),
         const SizedBox(height: 8),
-        for (final e in examenes) _fila(e['examen'] as String, dinero(e['precio_unitario'])),
+        for (final e in examenes)
+          if (e['precio_lista'] != null && (e['precio_lista'] as num) > (e['precio_unitario'] as num))
+            _fila('${e['examen']}  (antes ${dinero(e['precio_lista'])}, '
+                '${(100 - (e['precio_unitario'] as num) * 100 / (e['precio_lista'] as num)).round()} % de descuento)',
+                dinero(e['precio_unitario']))
+          else
+            _fila(e['examen'] as String, dinero(e['precio_unitario'])),
         if (s['cita_id'] != null && !consulta) _fila('Cita para la toma de muestras', 'sin costo'),
         const Divider(),
         _fila(consulta ? 'Subtotal (consulta, sin IVA)' : 'Subtotal ($n examen${n == 1 ? '' : 'es'}, sin IVA)', dinero(s['subtotal'])),
@@ -519,6 +541,76 @@ class _RecetasState extends State<_Recetas> {
                   )
                 : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [rp, const Divider(height: 24), indicaciones]),
           ),
+        ]),
+      ),
+    );
+  }
+}
+
+
+/// Dónde y cuándo hacerse los exámenes: una sucursal con fecha (en el calendario) y hora, u otro laboratorio.
+/// Devuelve {'franja_id': ...} o {'laboratorio_id': ...} (externo: allá se paga y luego se sube el PDF).
+class DondeYCuando extends StatefulWidget {
+  const DondeYCuando({super.key, required this.conExternos, this.sucursal});
+  final bool conExternos;
+  final int? sucursal;
+
+  @override
+  State<DondeYCuando> createState() => _DondeYCuandoState();
+}
+
+class _DondeYCuandoState extends State<DondeYCuando> {
+  Map<String, dynamic>? _lab;
+  Map<String, dynamic>? _franja;
+
+  @override
+  Widget build(BuildContext context) {
+    final propio = _lab?['propio'] == true;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Dónde y cuándo'), backgroundColor: verdeOscuro, foregroundColor: Colors.white),
+      body: Centrado(
+        child: ListaConSubir(padding: const EdgeInsets.all(16), children: [
+          const Text('1. Elija la sucursal', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          SelectorSucursal(
+            conExternos: widget.conExternos,
+            inicial: widget.sucursal,
+            alElegir: (l) => setState(() {
+              _lab = l;
+              _franja = null;
+            }),
+          ),
+          if (_lab != null && propio) ...[
+            const SizedBox(height: 16),
+            const Text('2. Elija la fecha y la hora', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Muchos exámenes requieren ayuno: le recomendamos los primeros horarios.',
+                style: TextStyle(color: Colors.grey, fontSize: 13)),
+            const SizedBox(height: 6),
+            SelectorTurno(
+              key: ValueKey('s${_lab!['laboratorio_id']}'),
+              laboratorioId: _lab!['laboratorio_id'] as int,
+              cupos: true,
+              alElegir: (f) => setState(() => _franja = f),
+            ),
+          ],
+          const SizedBox(height: 20),
+          if (_lab != null && !propio)
+            FilledButton.icon(
+              icon: const Icon(Icons.apartment),
+              label: Padding(padding: const EdgeInsets.all(10), child: Text('Hacerme los exámenes en ${_lab!['nombre']}')),
+              onPressed: () => Navigator.pop(context, {'laboratorio_id': _lab!['laboratorio_id']}),
+            )
+          else
+            FilledButton.icon(
+              icon: const Icon(Icons.check),
+              label: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Text(_franja == null
+                    ? 'Elija fecha y hora'
+                    : 'Confirmar: ${fechaLarga(_franja!['fecha'] as String)} a las ${hora(_franja!['hora_inicio'])}'),
+              ),
+              onPressed: _franja == null ? null : () => Navigator.pop(context, {'franja_id': _franja!['franja_id']}),
+            ),
         ]),
       ),
     );

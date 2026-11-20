@@ -48,6 +48,9 @@ export interface Cita {
   medico: string | null;
   especialidad: string | null;
   vence_at: string | null;
+  cita_origen_id?: number | null;
+  laboratorio_id?: number | null;
+  sucursal?: string | null;
 }
 
 export interface MedicoAgenda {
@@ -83,6 +86,9 @@ export interface SolicitudResumen {
   laboratorio?: string | null;
   /** false = laboratorio externo (no se cobra aquí; el resultado llega en PDF). */
   laboratorio_propio?: boolean | null;
+  /** Consulta en la que el médico ordenó estos exámenes. */
+  consulta_cita_id?: number | null;
+  examenes_listos?: number;
 }
 
 export interface Laboratorio {
@@ -92,6 +98,21 @@ export interface Laboratorio {
   telefono: string | null;
   email: string | null;
   propio: boolean;
+  activo: boolean;
+  latitud: number | null;
+  longitud: number | null;
+}
+
+export interface Descuento {
+  descuento_id: number;
+  nombre: string;
+  porcentaje: number;
+  laboratorio_id: number | null;
+  sucursal: string | null;
+  tipo_examen_id: number | null;
+  examen: string | null;
+  desde: string;
+  hasta: string;
   activo: boolean;
 }
 
@@ -208,6 +229,10 @@ export interface UsuarioAdmin {
   cedula: string;
   nombre: string;
   roles: string | null;
+  /** Solo laboratoristas: sucursal donde trabajan (ahí ven su agenda del día). */
+  laboratorista_id?: number | null;
+  sucursal_id?: number | null;
+  sucursal?: string | null;
 }
 
 /* ---- Base de conocimientos para diagnósticos ---- */

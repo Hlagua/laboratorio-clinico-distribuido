@@ -20,8 +20,13 @@ export const routes: Routes = [
   { path: 'pagos', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/pagos').then((m) => m.Pagos) },
   { path: 'usuarios', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/usuarios').then((m) => m.Usuarios) },
   { path: 'catalogo', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/catalogo').then((m) => m.Catalogo) },
+  { path: 'sucursales', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/sucursales').then((m) => m.Sucursales) },
+  { path: 'franjas', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/franjas').then((m) => m.Franjas) },
+  { path: 'descuentos', canActivate: [conRol('ADMIN')], loadComponent: () => import('./paginas/descuentos').then((m) => m.Descuentos) },
+  // Solo el administrador mantiene la base de conocimientos (el médico recibe sus sugerencias al revisar resultados).
+  { path: 'conocimiento', pathMatch: 'full', redirectTo: 'conocimiento/reglas' },
   {
-    path: 'conocimiento', canActivate: [conRol('MEDICO', 'ADMIN')],
+    path: 'conocimiento/:seccion', canActivate: [conRol('ADMIN')],
     loadComponent: () => import('./paginas/conocimiento').then((m) => m.Conocimiento),
   },
   { path: 'reportes', canActivate: [conRol('ADMIN', 'MEDICO')], loadComponent: () => import('./paginas/reportes').then((m) => m.Reportes) },

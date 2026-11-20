@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../comun.dart';
 import '../main.dart';
-import 'solicitud.dart';
+import 'turnos.dart';
 
 /// Reserva de cita. Dos tipos:
-/// - Consulta médica: el paciente elige médico y turno, y paga la consulta. El médico le
-///   ordena los exámenes y le agenda la cita de control.
-/// - Toma de muestras: para quien ya sabe qué exámenes hacerse (o se los ordenó su médico).
+/// - Consulta médica: el paciente elige médico, fecha (en un calendario) y hora, y paga la consulta.
+///   El médico le ordena los exámenes que necesite (o solo la receta) y le agenda el control.
+/// - Toma de muestras: elige la sucursal, la fecha y la hora (para quien ya sabe qué exámenes hacerse).
+/// Al terminar vuelve al panel con {cita, pagar}: el panel muestra la cita nueva en seguida.
 class ReservarCita extends StatefulWidget {
   const ReservarCita({super.key});
 
@@ -19,33 +20,25 @@ class _ReservarCitaState extends State<ReservarCita> {
   String _tipo = 'CONSULTA';
   late final Future<List<dynamic>> _medicos = _cargarMedicos();
   Map<String, dynamic>? _medico;
-  Future<List<dynamic>>? _franjas;
-  String? _dia;
+  Map<String, dynamic>? _sucursal;
   Map<String, dynamic>? _franja;
   final _motivo = TextEditingController();
   bool _enviando = false;
 
   Future<List<dynamic>> _cargarMedicos() async => await api.get('/api/citas/medicos') as List<dynamic>;
 
-  Future<List<dynamic>> _cargarFranjas() async => await api.get('/api/citas/franjas', {
-        'dias': '14',
-        if (_tipo == 'CONSULTA' && _medico != null) 'medico_id': '${_medico!['medico_id']}',
-      }) as List<dynamic>;
-
   void _cambiarTipo(String t) => setState(() {
         _tipo = t;
         _medico = null;
-        _dia = null;
+        _sucursal = null;
         _franja = null;
-        _franjas = t == 'MUESTRA' ? _cargarFranjas() : null;
       });
 
-  void _elegirMedico(Map<String, dynamic> m) => setState(() {
-        _medico = m;
-        _dia = null;
-        _franja = null;
-        _franjas = _cargarFranjas();
-      });
+  @override
+  void dispose() {
+    _motivo.dispose();
+    super.dispose();
+  }
 
   Future<void> _reservar() async {
     setState(() => _enviando = true);
@@ -57,46 +50,48 @@ class _ReservarCitaState extends State<ReservarCita> {
       }) as Map<String, dynamic>;
       if (!mounted) return;
       final consulta = _tipo == 'CONSULTA';
-      await showDialog<void>(
+      final pagar = await showDialog<bool>(
         context: context,
-        builder: (_) => AlertDialog(
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
           title: Text(consulta ? 'Consulta reservada' : 'Cita reservada'),
-          content: Text('${consulta ? 'Su consulta con Dr(a). ${cita['medico']}' : 'Su turno de toma de muestras'} es el '
+          content: Text('${consulta ? 'Su consulta con Dr(a). ${cita['medico']}' : 'Su turno de toma de muestras en ${cita['sucursal']}'} es el '
               '${fechaLarga(cita['fecha'] as String)} a las ${hora(cita['hora_inicio'])}.\n\n'
               '${consulta ? 'Para confirmarla, pague la consulta' : 'Para confirmarla, elija sus exámenes y páguelos'} '
-              'en los próximos 30 minutos.'),
+              'en los próximos 30 minutos. La verá desde ya en "Mis citas".'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Más tarde')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Más tarde')),
             FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => consulta
-                            ? DetalleSolicitud(id: cita['solicitud_id'] as int)
-                            : NuevaSolicitud(citaId: cita['cita_id'] as int)));
-              },
+              onPressed: () => Navigator.pop(ctx, true),
               child: Text(consulta ? 'Pagar la consulta' : 'Elegir exámenes y pagar'),
             ),
           ],
         ),
       );
-      if (mounted && Navigator.canPop(context)) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, {'cita': cita, 'pagar': pagar == true});
     } catch (e) {
-      if (mounted) mostrarMensaje(context, '$e', error: true);
-      setState(() => _franjas = _cargarFranjas()); // el cupo pudo haberse ocupado
+      if (mounted) {
+        mostrarMensaje(context, '$e', error: true);
+        setState(() => _franja = null); // el cupo pudo haberse ocupado
+      }
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
   }
 
+  Widget _paso(String texto) => Padding(
+        padding: const EdgeInsets.only(top: 16, bottom: 8),
+        child: Text(texto, style: const TextStyle(fontWeight: FontWeight.bold)),
+      );
+
   @override
   Widget build(BuildContext context) {
+    final consulta = _tipo == 'CONSULTA';
+    final listoParaTurno = consulta ? _medico != null : _sucursal != null;
     return Scaffold(
       appBar: AppBar(title: const Text('Reservar cita'), backgroundColor: verdeOscuro, foregroundColor: Colors.white),
       body: Centrado(
-        child: ListView(padding: const EdgeInsets.all(16), children: [
+        child: ListaConSubir(padding: const EdgeInsets.all(16), children: [
           const Text('¿Qué necesita?', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           SegmentedButton<String>(
@@ -109,15 +104,14 @@ class _ReservarCitaState extends State<ReservarCita> {
           ),
           const SizedBox(height: 6),
           Text(
-            _tipo == 'CONSULTA'
-                ? 'Si es su primera vez o no sabe qué exámenes necesita: el médico lo revisa, le ordena los exámenes y le agenda el control.'
+            consulta
+                ? 'Si es su primera vez o no sabe qué exámenes necesita: el médico lo revisa, le receta o le ordena '
+                    'exámenes y le agenda el control.'
                 : 'Si ya tiene exámenes que hacerse (por ejemplo, los que le ordenó su médico).',
             style: const TextStyle(color: Colors.grey, fontSize: 13),
           ),
-          const SizedBox(height: 16),
-          if (_tipo == 'CONSULTA') ...[
-            const Text('1. Elija el médico', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
+          if (consulta) ...[
+            _paso('1. Elija el médico'),
             Cargando<List<dynamic>>(
               futuro: _medicos,
               reintentar: () => setState(() {}),
@@ -132,83 +126,62 @@ class _ReservarCitaState extends State<ReservarCita> {
                           '${m['turnos_libres']} turno${m['turnos_libres'] == 1 ? '' : 's'} libres'),
                       trailing: _medico?['medico_id'] == m['medico_id'] ? const Icon(Icons.check_circle, color: verde) : null,
                       enabled: (m['turnos_libres'] as int) > 0,
-                      onTap: () => _elegirMedico(m),
+                      onTap: () => setState(() {
+                        _medico = m;
+                        _franja = null;
+                      }),
                     ),
                   ),
                 if (lista.isEmpty) const Text('No hay médicos con agenda disponible.'),
               ]),
             ),
-            const SizedBox(height: 16),
+          ] else ...[
+            _paso('1. Elija la sucursal'),
+            SelectorSucursal(alElegir: (l) => setState(() {
+                  _sucursal = l;
+                  _franja = null;
+                })),
           ],
-          if (_franjas != null)
-            Cargando<List<dynamic>>(
-              futuro: _franjas,
-              reintentar: () => setState(() => _franjas = _cargarFranjas()),
-              constructor: (lista) => _horarios(lista.cast<Map<String, dynamic>>()),
+          if (listoParaTurno) ...[
+            _paso('2. Elija la fecha y la hora'),
+            if (!consulta)
+              const Text('Muchos exámenes requieren ayuno: le recomendamos los primeros horarios.',
+                  style: TextStyle(color: Colors.grey, fontSize: 13)),
+            const SizedBox(height: 6),
+            SelectorTurno(
+              key: ValueKey(consulta ? 'm${_medico!['medico_id']}' : 's${_sucursal!['laboratorio_id']}'),
+              medicoId: consulta ? _medico!['medico_id'] as int : null,
+              laboratorioId: consulta ? null : _sucursal!['laboratorio_id'] as int,
+              cupos: !consulta,
+              alElegir: (f) => setState(() => _franja = f),
             ),
+            const SizedBox(height: 20),
+            // La API acepta hasta 300 caracteres; se limita a 200 para que sea un resumen breve.
+            TextField(
+                controller: _motivo,
+                maxLength: 200,
+                inputFormatters: [sinEmojis],
+                maxLines: 2,
+                minLines: 1,
+                decoration: InputDecoration(
+                    labelText: consulta ? 'Motivo de la consulta (opcional)' : 'Motivo (opcional)',
+                    helperText: 'Breve: por ejemplo, "cansancio y sed desde hace un mes"')),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _franja == null || _enviando ? null : _reservar,
+              icon: const Icon(Icons.check),
+              label: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Text(_enviando
+                    ? 'Reservando…'
+                    : _franja == null
+                        ? 'Elija fecha y hora'
+                        : 'Reservar el ${fechaLarga(_franja!['fecha'] as String)} a las ${hora(_franja!['hora_inicio'])}'),
+              ),
+            ),
+          ],
         ]),
       ),
     );
-  }
-
-  Widget _horarios(List<Map<String, dynamic>> lista) {
-    final porDia = <String, List<Map<String, dynamic>>>{};
-    for (final f in lista) {
-      porDia.putIfAbsent(f['fecha'] as String, () => []).add(f);
-    }
-    if (porDia.isEmpty) return const Text('No hay horarios disponibles en los próximos días.');
-    _dia ??= porDia.keys.first;
-    final n = _tipo == 'CONSULTA' ? 2 : 1;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text('$n. Elija el día', style: const TextStyle(fontWeight: FontWeight.bold)),
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        for (final d in porDia.keys)
-          ChoiceChip(
-            label: Text(fechaLarga(d)),
-            selected: d == _dia,
-            onSelected: (_) => setState(() {
-              _dia = d;
-              _franja = null;
-            }),
-          ),
-      ]),
-      const SizedBox(height: 20),
-      Text('${n + 1}. Elija la hora', style: const TextStyle(fontWeight: FontWeight.bold)),
-      if (_tipo == 'MUESTRA')
-        const Text('Muchos exámenes requieren ayuno: le recomendamos los primeros horarios.',
-            style: TextStyle(color: Colors.grey, fontSize: 13)),
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        for (final f in porDia[_dia] ?? <Map<String, dynamic>>[])
-          ChoiceChip(
-            label: Text(_tipo == 'CONSULTA'
-                ? hora(f['hora_inicio'])
-                : '${hora(f['hora_inicio'])}  ·  ${f['cupos_libres']} cupo${f['cupos_libres'] == 1 ? '' : 's'}'),
-            selected: _franja?['franja_id'] == f['franja_id'],
-            onSelected: (_) => setState(() => _franja = f),
-          ),
-      ]),
-      const SizedBox(height: 20),
-      // La API acepta hasta 300 caracteres; se limita a 200 para que sea un resumen breve.
-      TextField(
-          controller: _motivo,
-          maxLength: 200,
-          inputFormatters: [sinEmojis],
-          maxLines: 2,
-          minLines: 1,
-          decoration: InputDecoration(
-              labelText: _tipo == 'CONSULTA' ? 'Motivo de la consulta (opcional)' : 'Motivo (opcional)',
-              helperText: 'Breve: por ejemplo, "cansancio y sed desde hace un mes"')),
-      const SizedBox(height: 20),
-      FilledButton.icon(
-        onPressed: _franja == null || _enviando ? null : _reservar,
-        icon: const Icon(Icons.check),
-        label: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Text(_enviando ? 'Reservando…' : 'Reservar ${_franja == null ? '' : 'a las ${hora(_franja!['hora_inicio'])}'}'),
-        ),
-      ),
-    ]);
   }
 }

@@ -29,7 +29,10 @@ void _marcarVistas(int id) {
 
 /// Campana con el número de avisos nuevos; al tocarla abre el centro de notificaciones.
 class Campana extends StatefulWidget {
-  const Campana({super.key});
+  const Campana({super.key, this.alAbrir});
+
+  /// Al tocar un aviso: adónde llevar al paciente (su solicitud o sus citas).
+  final void Function(Map<String, dynamic> enlace)? alAbrir;
 
   @override
   State<Campana> createState() => _CampanaState();
@@ -64,8 +67,10 @@ class _CampanaState extends State<Campana> {
         await _cargar();
         if (_avisos.isNotEmpty) _marcarVistas(_avisos.first['notificacion_id'] as int);
         if (!context.mounted) return;
-        await Navigator.push(context, MaterialPageRoute(builder: (_) => CentroNotificaciones(avisos: _avisos, vista: vista)));
+        final enlace = await Navigator.push<Map<String, dynamic>>(
+            context, MaterialPageRoute(builder: (_) => CentroNotificaciones(avisos: _avisos, vista: vista)));
         setState(() {});
+        if (enlace != null) widget.alAbrir?.call(enlace);
       },
     );
   }
@@ -87,6 +92,9 @@ class CentroNotificaciones extends StatelessWidget {
                     Card(
                       color: (a['notificacion_id'] as int) > vista ? const Color(0xFFE6F2EE) : null,
                       child: ListTile(
+                        // Tocar el aviso lleva a lo que avisa (la solicitud, el pago, las citas).
+                        onTap: a['enlace'] == null ? null : () => Navigator.pop(context, a['enlace'] as Map<String, dynamic>),
+                        trailing: a['enlace'] == null ? null : const Icon(Icons.chevron_right),
                         leading: Icon(_icono(a['tipo'] as String?), color: verde),
                         title: Text(a['asunto'] as String),
                         subtitle: Text('${a['cuerpo']}\n${fechaHora(a['created_at'])} · '
@@ -105,60 +113,6 @@ class CentroNotificaciones extends StatelessWidget {
         'CITA_RESERVADA' || 'CITA_REPROGRAMADA' => Icons.event,
         _ => Icons.mail_outline,
       };
-}
-
-// ------------------------------------------------------------------
-// Reagendar: elegir un día (dentro de 30 días) y un horario libre.
-// ------------------------------------------------------------------
-const diasParaReagendar = 30;
-
-Future<bool> reagendarCita(BuildContext context, Map<String, dynamic> cita) async {
-  final hoy = DateTime.now();
-  final dia = await showDatePicker(
-    context: context,
-    initialDate: hoy,
-    firstDate: hoy,
-    lastDate: hoy.add(const Duration(days: diasParaReagendar)),
-    helpText: 'Nueva fecha (máximo $diasParaReagendar días)',
-  );
-  if (dia == null || !context.mounted) return false;
-  final fecha = dia.toIso8601String().substring(0, 10);
-  List<Map<String, dynamic>> franjas;
-  try {
-    franjas = (await api.get('/api/citas/franjas', {
-      'desde': fecha,
-      'dias': '1',
-      if (cita['medico_id'] != null) 'medico_id': '${cita['medico_id']}',
-    }) as List)
-        .cast<Map<String, dynamic>>()
-        .where((f) => f['fecha'] == fecha && f['franja_id'] != cita['franja_id'])
-        .toList();
-  } catch (e) {
-    if (context.mounted) mostrarMensaje(context, '$e', error: true);
-    return false;
-  }
-  if (!context.mounted) return false;
-  final elegida = await showDialog<Map<String, dynamic>>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text('Horarios del ${fechaLarga(fecha)}'),
-      content: franjas.isEmpty
-          ? const Text('No hay horarios libres ese día. Pruebe con otra fecha.')
-          : Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final f in franjas) ActionChip(label: Text(hora(f['hora_inicio'])), onPressed: () => Navigator.pop(ctx, f)),
-            ]),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar'))],
-    ),
-  );
-  if (elegida == null) return false;
-  try {
-    await api.post('/api/citas/${cita['cita_id']}/reprogramar', {'franja_id': elegida['franja_id']});
-    if (context.mounted) mostrarMensaje(context, 'Cita reprogramada para el ${fechaLarga(fecha)} a las ${hora(elegida['hora_inicio'])}.');
-    return true;
-  } catch (e) {
-    if (context.mounted) mostrarMensaje(context, '$e', error: true);
-    return false;
-  }
 }
 
 // ------------------------------------------------------------------

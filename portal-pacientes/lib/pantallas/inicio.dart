@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../comun.dart';
 import '../main.dart';
+import 'turnos.dart';
 
 /// Página pública: carrusel de fotos, servicios, cómo funciona, catálogo de exámenes y datos de atención.
 /// Fotos de uso libre de Unsplash (licencia Unsplash).
@@ -90,7 +91,7 @@ class _InicioState extends State<Inicio> {
           ],
         ],
       ),
-      body: ListView(children: [
+      body: ListaConSubir(children: [
         const AvisoContingencia(),
         Padding(
           padding: EdgeInsets.fromLTRB(escritorio ? 40 : 12, 20, escritorio ? 40 : 12, 0),

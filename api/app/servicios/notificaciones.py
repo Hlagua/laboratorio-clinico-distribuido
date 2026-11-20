@@ -199,11 +199,45 @@ def prueba():
     return jsonify(enviado=True, mailjet_message_id=msg_id, instancia=config.INSTANCIA)
 
 
+# A qué rol va cada tipo de aviso (lo que no está aquí es para el paciente).
+ROL_POR_TIPO = {"RESULTADO_MEDICO": "MEDICO"}
+# Adónde lleva cada aviso al tocarlo: a la solicitud de su código o a la lista de citas.
+_A_CITAS = {"CITA_RESERVADA", "CITA_REPROGRAMADA", "CITA_CANCELADA"}
+
+
+def _con_enlace(avisos: list[dict]) -> list[dict]:
+    codigos = sorted({m.group() for a in avisos if (m := _CODIGO_SOLICITUD.search(a["asunto"] or ""))})
+    ids = {}
+    if codigos:
+        marcas = ", ".join("?" for _ in codigos)
+        ids = {f["codigo"]: f for f in db.leer(
+            f"SELECT solicitud_id, codigo, tipo, cita_id FROM {{e}}.solicitud_examen WHERE codigo IN ({marcas})", *codigos)}
+    for a in avisos:
+        a["rol"] = ROL_POR_TIPO.get(a["tipo"], "PACIENTE")
+        m = _CODIGO_SOLICITUD.search(a["asunto"] or "")
+        s = ids.get(m.group()) if m else None
+        if a["tipo"] in _A_CITAS:
+            a["enlace"] = {"tipo": "citas", "solicitud_id": s["solicitud_id"] if s else None}
+        elif s:
+            a["enlace"] = {"tipo": "solicitud", "solicitud_id": s["solicitud_id"], "codigo": s["codigo"]}
+        else:
+            a["enlace"] = None
+    return avisos
+
+
 @bp.get("/mias")
 @requiere()
 def mis_notificaciones():
-    """Centro de notificaciones: los últimos avisos del usuario (los mismos que se le envían por correo)."""
-    return jsonify(db.leer(
+    """Centro de notificaciones: los últimos avisos del usuario (los mismos que se le envían por correo).
+
+    Quien tiene varios roles ve solo los avisos del rol con el que entró (X-Rol-Activo). Cada aviso trae
+    'enlace': adónde llevar al usuario al tocarlo (la solicitud del aviso o sus citas).
+    """
+    avisos = _con_enlace(db.leer(
         "SELECT notificacion_id, tipo, asunto, cuerpo, estado, created_at, enviada_at FROM {e}.notificacion "
-        "WHERE persona_id = ? ORDER BY notificacion_id DESC OFFSET 0 ROWS FETCH NEXT 50 ROWS ONLY",
+        "WHERE persona_id = ? ORDER BY notificacion_id DESC OFFSET 0 ROWS FETCH NEXT 80 ROWS ONLY",
         usuario_actual()["persona_id"], contingencia=False))
+    rol = request.headers.get("X-Rol-Activo")
+    if rol:
+        avisos = [a for a in avisos if a["rol"] == rol]
+    return jsonify(avisos[:50])

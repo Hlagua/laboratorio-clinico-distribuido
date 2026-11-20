@@ -8,7 +8,7 @@ from ..paginacion import donde, listar, rango_fechas
 from ..errores import ApiError
 from ..pdf import pdf_ingresos
 from ..seguridad import ROLES, hash_password, requiere, usuario_actual, validar_password
-from ..validacion import cedula, correo, cuerpo, fecha, nacimiento, nombre, telefono, texto
+from ..validacion import cedula, correo, cuerpo, entero, fecha, nacimiento, nombre, telefono, texto
 
 bp = Blueprint("usuarios", __name__, url_prefix="/api")
 
@@ -31,12 +31,15 @@ def listar_usuarios():
         params.append(request.args["activo"] == "1")
     return listar("""
         SELECT u.usuario_id, u.email, u.activo, u.ultimo_login, p.cedula, CONCAT(p.nombres, ' ', p.apellidos) AS nombre,
-               STRING_AGG(r.codigo, ',') AS roles
+               STRING_AGG(r.codigo, ',') AS roles, lt.laboratorista_id, lt.laboratorio_id AS sucursal_id, sc.nombre AS sucursal
         FROM {e}.usuario u
         JOIN {e}.persona p ON p.persona_id = u.persona_id
         LEFT JOIN {e}.usuario_rol ur ON ur.usuario_id = u.usuario_id
-        LEFT JOIN {e}.rol r ON r.rol_id = ur.rol_id""" + donde(condiciones) + """
-        GROUP BY u.usuario_id, u.email, u.activo, u.ultimo_login, p.cedula, p.nombres, p.apellidos""",
+        LEFT JOIN {e}.rol r ON r.rol_id = ur.rol_id
+        LEFT JOIN {e}.laboratorista lt ON lt.persona_id = u.persona_id
+        LEFT JOIN {e}.laboratorio sc ON sc.laboratorio_id = lt.laboratorio_id""" + donde(condiciones) + """
+        GROUP BY u.usuario_id, u.email, u.activo, u.ultimo_login, p.cedula, p.nombres, p.apellidos,
+                 lt.laboratorista_id, lt.laboratorio_id, sc.nombre""",
         params, "ORDER BY u.usuario_id", maximo=1000)
 
 
@@ -73,6 +76,16 @@ def asignar_rol(usuario_id: int):
                    especialidad_o_area=texto(d, "especialidad_o_area", False, 100),
                    admin_id=usuario_actual()["usuario_id"])
     return jsonify(mensaje=f"Rol {rol} asignado.", usuario_id=usuario_id)
+
+
+@bp.put("/usuarios/<int:usuario_id>/sucursal")
+@requiere("ADMIN")
+def asignar_sucursal(usuario_id: int):
+    """Sucursal en la que trabaja un laboratorista: ahí ve su agenda del día."""
+    laboratorio_id = entero(cuerpo(), "laboratorio_id")
+    db.ejecutar_sp("sp_asignar_sucursal", usuario_id=usuario_id, laboratorio_id=laboratorio_id,
+                   admin_id=usuario_actual()["usuario_id"])
+    return jsonify(usuario_id=usuario_id, laboratorio_id=laboratorio_id)
 
 
 @bp.patch("/usuarios/<int:usuario_id>")

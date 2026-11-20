@@ -8,6 +8,7 @@ Flujo Stripe:
 """
 import json
 import logging
+import re
 import secrets
 import time
 from decimal import Decimal
@@ -28,7 +29,7 @@ bp = Blueprint("pagos", __name__, url_prefix="/api/pagos")
 log = logging.getLogger("api")
 
 SQL_PAGOS = """
-SELECT pg.pago_id, pg.solicitud_id, s.codigo AS solicitud_codigo, pg.monto, pg.moneda, pg.metodo, pg.estado,
+SELECT pg.pago_id, pg.solicitud_id, s.codigo AS solicitud_codigo, pg.monto, pg.moneda, pg.metodo, pg.estado, pg.titular_tarjeta,
        pg.motivo_rechazo, pg.monto_reembolsado, pg.referencia_transferencia, pg.stripe_payment_intent_id,
        pg.confirmado_at, pg.created_at, s.paciente_id, CONCAT(p.nombres, ' ', p.apellidos) AS paciente
 FROM {e}.pago pg
@@ -83,14 +84,36 @@ def _sesion_stripe(s: dict, exito: str, cancelado: str, email: str | None):
 @bp.post("/checkout")
 @requiere("PACIENTE")
 def checkout():
-    """Registra la solicitud de pago y devuelve la URL de Stripe Checkout."""
-    s = _solicitud_a_pagar(entero(cuerpo(), "solicitud_id"))
+    """Registra la solicitud de pago y devuelve la URL de Stripe Checkout.
+
+    El nombre del titular de la tarjeta se pide antes en el portal (solo letras y un espacio entre
+    palabras): la página de Stripe no permite validarlo. Se guarda con el pago.
+    """
+    d = cuerpo()
+    s = _solicitud_a_pagar(entero(d, "solicitud_id"))
+    titular = nombre_titular(d)
     sesion = _sesion_stripe(
         s, f"{config.URL_PORTAL}/pagos/resultado?estado=exito&session_id={{CHECKOUT_SESSION_ID}}",
         f"{config.URL_PORTAL}/pagos/resultado?estado=cancelado&solicitud={s['solicitud_id']}", s["email"])
     pago_id = db.ejecutar_sp("sp_crear_pago", "pago_id", solicitud_id=s["solicitud_id"], metodo="STRIPE",
                              stripe_checkout_session_id=sesion.id, usuario_id=usuario_actual()["usuario_id"])
+    if titular:
+        db.ejecutar_sp("sp_titular_pago", pago_id=pago_id, titular=titular)
     return jsonify(pago_id=pago_id, checkout_url=sesion.url, session_id=sesion.id, monto=s["total"]), 201
+
+
+_TITULAR = re.compile(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+( [A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$")
+
+
+def nombre_titular(d: dict) -> str | None:
+    """Nombre del titular: solo letras, un espacio entre palabras, sin espacios al inicio ni al final."""
+    valor = d.get("titular")
+    if valor is None or valor == "":
+        return None
+    if not isinstance(valor, str) or not 3 <= len(valor) <= 100 or not _TITULAR.match(valor) or " " not in valor:
+        raise ApiError("El nombre del titular debe tener nombre y apellido, solo con letras y un espacio entre palabras.",
+                       422, "TITULAR_INVALIDO")
+    return valor
 
 
 def _datos_factura(d: dict) -> dict:
@@ -291,6 +314,14 @@ def reembolsar(pago_id: int):
     d = cuerpo()
     monto = decimal(d, "monto").quantize(Decimal("0.01"))
     motivo = texto(d, "motivo", maximo=300)
+    return jsonify(reembolsar_pago(pago_id, monto, motivo)), 201
+
+
+def reembolsar_pago(pago_id: int, monto: Decimal, motivo: str) -> dict:
+    """Devuelve `monto` del pago (por Stripe si se pagó con tarjeta) y avisa al paciente.
+
+    La usa el administrador y también la cancelación de una cita pagada (devolución parcial).
+    """
     pago = db.leer_uno(SQL_PAGOS + " WHERE pg.pago_id = ?", pago_id, contingencia=False)
     if not pago:
         raise no_encontrado("El pago")
@@ -317,4 +348,5 @@ def reembolsar(pago_id: int):
     persona = db.leer_uno("SELECT pa.persona_id FROM {e}.paciente pa WHERE pa.paciente_id = ?", pago["paciente_id"])
     encolar(persona["persona_id"], "REEMBOLSO", f"Reembolso registrado - {pago['solicitud_codigo']}",
             f"Se registró un reembolso de USD {monto} para la solicitud {pago['solicitud_codigo']}. Motivo: {motivo}.")
-    return jsonify(reembolso_id=reembolso_id, stripe_refund_id=refund_id, pago=db.leer_uno(SQL_PAGOS + " WHERE pg.pago_id = ?", pago_id)), 201
+    return {"reembolso_id": reembolso_id, "stripe_refund_id": refund_id,
+            "pago": db.leer_uno(SQL_PAGOS + " WHERE pg.pago_id = ?", pago_id)}

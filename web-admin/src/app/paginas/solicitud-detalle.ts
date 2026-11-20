@@ -15,7 +15,8 @@ interface Captura { parametro: Parametro; valor: string }
   selector: 'app-solicitud-detalle',
   imports: [FormsModule, RouterLink, Sugerencias, RecetaPanel],
   template: `
-    <button type="button" class="secundario chico" routerLink="/solicitudes">← Volver a solicitudes</button>
+    <!-- Si se abrió desde una consulta, vuelve a ella para terminarla. -->
+    <button type="button" class="secundario chico" [routerLink]="volver()">&larr; {{ volver() === '/solicitudes' ? 'Volver a solicitudes' : 'Volver a la consulta' }}</button>
     @if (error()) { <div class="alerta error">{{ error() }}</div> }
     @if (aviso()) { <div class="alerta ok">{{ aviso() }}</div> }
     @if (s(); as s) {
@@ -214,6 +215,7 @@ export class SolicitudDetalle implements OnInit, OnDestroy {
   protected readonly aviso = signal('');
   protected readonly guardando = signal(false);
   private readonly ruta = inject(ActivatedRoute);
+  protected readonly volver = signal(this.destinoVolver());
   /** Cobro en ventanilla: URL de Stripe Checkout y su QR mientras se espera la confirmación. */
   protected readonly cobro = signal<{ pago_id: number; checkout_url: string; qr: string; monto: number } | null>(null);
   protected consumidorFinal = false;
@@ -222,6 +224,12 @@ export class SolicitudDetalle implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     clearInterval(this.espera);
+  }
+
+  /** Solo se acepta volver a una consulta del propio sistema; si no, a la lista de solicitudes. */
+  private destinoVolver(): string {
+    const v = this.ruta.snapshot.queryParamMap.get('volver') ?? '';
+    return /^\/consulta\/\d+$/.test(v) ? v : '/solicitudes';
   }
 
   async cobrar() {

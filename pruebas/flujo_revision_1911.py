@@ -36,12 +36,12 @@ r = pedir("POST", "/api/citas", pac, "PACIENTE", json={"franja_id": 1, "motivo":
 ok(r.status_code == 422, "2. motivo con emoji: rechazado (422)", r.json().get("error"))
 
 # --- Horario propio del médico: mañanas cada 30 min y tardes cada hora ---
-# Una semana (dentro de los 30 días que permite reagendar) donde el médico aún no tenga turnos.
-ini = next((date.today() + timedelta(days=k) for k in range(2, 24)
+# Una semana (dentro de los 3 meses que permite reagendar) donde el médico aún no tenga turnos.
+ini = next((date.today() + timedelta(days=k) for k in range(2, 80)
            if not pedir("GET", "/api/citas/horario", med, "MEDICO",
                         params={"desde": (date.today() + timedelta(days=k)).isoformat(), "dias": 6}).json()), None)
 if ini is None:
-    raise SystemExit("El médico ya tiene turnos en todas las semanas de los próximos 30 días: libere una semana para repetir la prueba.")
+    raise SystemExit("El médico ya tiene turnos en todas las semanas de los próximos 3 meses: libere una semana para repetir la prueba.")
 fin = ini + timedelta(days=6)
 cuerpo = {"desde": ini.isoformat(), "hasta": fin.isoformat(), "dias": [1, 2, 3, 4, 5],
           "bloques": [{"inicio": "08:00", "fin": "10:00", "minutos": 30}, {"inicio": "15:00", "fin": "17:00", "minutos": 60}]}

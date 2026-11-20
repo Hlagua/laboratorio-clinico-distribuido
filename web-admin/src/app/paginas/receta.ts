@@ -72,7 +72,7 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').tri
                   <strong>{{ i + 1 }}.</strong>
                   <input class="nombre" list="vademecum" maxlength="120" [(ngModel)]="f.nombre" (ngModelChange)="escribiendo(f)" (blur)="alSalir(f)"
                          placeholder="Escriba el medicamento…" aria-label="Medicamento" />
-                  <button type="button" class="secundario chico" (click)="quitar(i)" title="Quitar">✕</button>
+                  <button type="button" class="secundario chico" (click)="quitar(i)" title="Quitar">&times;</button>
                 </div>
                 <small class="muted contador">{{ f.nombre.length }}/120 · medicamento, concentración y cantidad (ej. Ibuprofeno 600 mg, 20 tabletas)</small>
                 @if (f.base) {
@@ -92,7 +92,7 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').tri
                 <textarea rows="2" maxlength="1000" [(ngModel)]="f.indicaciones" (ngModelChange)="tocado(f)"
                           placeholder="Cómo tomarlo: dosis, cada cuánto, por cuántos días y recomendaciones"></textarea>
                 <small class="muted">{{ (f.indicaciones ?? '').length }}/1000</small>
-                @if (f.advertencias) { <small class="advertencia">⚠ {{ f.advertencias }}</small> }
+                @if (f.advertencias) { <small class="advertencia">Advertencia: {{ f.advertencias }}</small> }
               </div>
             }
             <div class="campo">
